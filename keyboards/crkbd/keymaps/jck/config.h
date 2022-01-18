@@ -25,11 +25,24 @@
 #define DIODE_DIRECTION COL2ROW
 #define USE_SERIAL_PD2
 #define SOFT_SERIAL_PIN D2
+
+#define SPLIT_TRANSPORT_MIRROR
+#define SPLIT_LAYER_STATE_ENABLE
+#define SPLIT_MODS_ENABLE
+#define FORCED_SYNC_THROTTLE_MS 100
+#define SPLIT_MAX_CONNECTION_ERRORS 10
+#define SPLIT_CONNECTION_CHECK_TIMEOUT 500
+#define SPLIT_LED_STATE_ENABLE
+//#define SPLIT_WPM_ENABLE
+//#define SPLIT_OLED_ENABLE
+
+// #ifdef OLED_ENABLE
+#define SPLIT_OLED_ENABLE
+// #endif // OLED_ENABLE
+
+
 #define RGB_DI_PIN      D3
-
 #define RGBLIGHT_SPLIT
-
-// #define SPLIT_TRANSPORT_MIRROR
 
 #ifdef RGB_MATRIX_ENABLE
     #define RGB_MATRIX_MAXIMUM_BRIGHTNESS 150 // limits maximum brightness of LEDs to 150 out of 255. Higher may cause the controller to crash.
@@ -37,12 +50,17 @@
     #define RGB_MATRIX_SAT_STEP 4
     #define RGB_MATRIX_VAL_STEP 4
     #define RGB_MATRIX_SPD_STEP 10
-
-    // #define ENABLE_RGB_MATRIX_BREATHING
-    // #define LED_MATRIX_KEYPRESSES
+    #define RGB_DISABLE_TIMEOUT 0
+//  #define RGB_MATRIX_KEYPRESSES
+//  #define RGB_MATRIX_FRAMEBUFFER_EFFECTS
+//  #define RGB_DISABLE_WHEN_USB_SUSPENDED
+//  #define RGB_MATRIX_SOLID_SPLASH
     // #define RGB_MATRIX_TYPING_MEATMAP_DECREASE_DELAY_MS 50
     // #define ENABLE_RGB_MATRIX_TYPING_HEATMAP
+    // #define ENABLE_RGB_MATRIX_BREATHING
 #endif
 
-// #define OLED_FONT_H "keyboards/crkbd/lib/glcdfont.c"
+// Corne logo
+//#define OLED_FONT_H "keyboards/crkbd/lib/glcdfont.c"
+// QMK logo
 #define OLED_FONT_H "keyboards/crkbd/keymaps/jck/glcdfont.c"
