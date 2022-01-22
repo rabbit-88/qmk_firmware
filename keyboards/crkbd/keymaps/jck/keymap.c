@@ -4,9 +4,11 @@
 
 #include QMK_KEYBOARD_H
 #include <stdio.h>
+#include "keycode.h"
 // #include "config.h"
 // #include "crkbd.h"
 #include "color.h"
+#include "rev1.h"
 // #include "rgb_matrix.h"
 // #include "rgb_matrix/rgb_matrix.h"
 
@@ -39,8 +41,6 @@
 #define KC_MS_ACC2  KC_MS_ACCEL2
 
 // #define TAPPING_TERM 375
-
-////void set_keylog(uint16_t keycode, keyrecord_t *record);
 
 #ifdef TAP_DANCE_ENABLE
 typedef enum {
@@ -105,11 +105,11 @@ qk_tap_dance_action_t tap_dance_actions[] = {
     #define TD_QDQ      TD(TD_QUOTE_DOUBLEQUOTE)
     #define TD_LBRCKT   TD(TD_BRACKETS_LEFT)
     #define TD_RBRCKT   TD(TD_BRACKETS_RIGHT)
-
 #else
     #define TD_QDQ      KC_NO
     #define TD_LBRCKT   KC_NO
     #define TD_RBRCKT   KC_NO
+
 #endif //  TAP_DANCE_ENABLE
 
 
@@ -130,6 +130,10 @@ enum _layers {
   _LAST
 };
 
+const char _layer_names[7][2] = {
+    "B", "L", "R", "A", "M", "r", "?"
+ };
+
 #define _PIPE      S(KC_PIPE)
 #define KC_LDAQ    LALT(KC_BSLASH)
 #define KC_RDAQ    LALT(S(KC_BSLASH))
@@ -140,10 +144,6 @@ enum _layers {
 #define MOUSE      MO(_MOUSE)
 #define ADJUST     MO(_ADJUST)
 #define TO_RGB     TO(_RGB)
-
-//  layer_state_t update_tri_layer_state(layer_state_t state, uint8_t layer1, uint8_t layer2, uint8_t layer3);
-//      when both _LOWER and _RAISE are active, also activate _ADJUST layer
-//
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [_BASE] = LAYOUT_split_3x6_3(
@@ -195,7 +195,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                                           _______, _______, BASE,      BASE,    _______, _______
   )
 };
-
 /*
   [0] = LAYOUT_split_3x6_3(
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
@@ -232,71 +231,98 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 */
 
+
+// #define KEYBOARD_SYNC_A
+// #define KEYBOARD_SYNC_B
+// #define SPLIT_TRANSACTION_IDS_KB KEYBOARD_SYNC_A, KEYBOARD_SYNC_B
+
+////////////////////////////////////////////////////////
+//
+//  DEBUG LOGIC
+//
 #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-char code_to_name(uint8_t);
-const uint8_t _charBufferSize = 64;
-char _charBuffer[64] = {};
-char _name = ' ';
-bool _active = false;
+char* get_buffer(void);
+void clear_buffer(void);
+void update_buffer( uint16_t keycode, keyrecord_t *record);
 #endif
-
-// #ifdef RGB_MATRIX_ENABLE
-// void set_layer_color(int layer);
-// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
-// #endif // RGB_MATRIX_ENABLE
-
 #ifdef OLED_ENABLE
-void oled_render_layer_state(void);
-void oled_render_keylog(void);
 void oled_render_logo(void);
-void set_keylog(uint16_t keycode, keyrecord_t *record);
+void oled_render_buffer(void);
+#endif
+struct _last_event_t {
+    uint8_t  row, col, pressed;
+    uint16_t keycode;
+} _last_event;
 
-oled_rotation_t oled_init_user(oled_rotation_t rotation) {
-  if (!is_keyboard_master()) {
-    return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
-  }
-  return rotation;
-}
-
-bool oled_task_user(void) {
-    if (is_keyboard_master()) {
-        if (_active) {
-            oled_render_layer_state();
-            oled_render_keylog();
-            return true;
-        }
-    }
-    // oled_render_logo();
-    return false;
-}
-#endif // OLED_ENABLE
-
-void housekeeping_task_user(void) {
-}
-void housekeeping_task_kb(void) {
-}
-void keyboard_pre_init_kb(void) {
-}
-void keyboard_post_init_kb(void) {
-    #ifdef RGB_MATRIX_ENABLE
-    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
+void keyboard_post_init_user(void) {
+    debug_enable=true;
+    debug_mouse=true;
+    // debug_matrix=true;
+    // debug_keyboard=true;
+    #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+    clear_buffer();
     #endif
     #ifdef OLED_ENABLE
     oled_render_logo();
     #endif
 }
 
+bool _active = false;
+
+// #ifdef RGB_MATRIX_ENABLE
+// void set_layer_color(int layer);
+// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
+// #endif // RGB_MATRIX_ENABLE
+
+// void keyboard_post_init_kb(void) {}
+
+#ifdef OLED_ENABLE
+oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
+    if (!is_keyboard_master()) {
+        return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
+    }
+    return rotation;
+}
+bool oled_task_kb(void) {
+    if (_active) {
+        oled_clear();
+        oled_render_buffer();
+    } else {
+        oled_render_logo();
+    }
+    return true;
+}
+#endif // OLED_ENABLE
+
+// void housekeeping_task_user(void) {
+// }
+// void housekeeping_task_kb(void) {
+// }
+// void keyboard_pre_init_kb(void) {
+// }
+
+// #ifdef RGB_MATRIX_ENABLE
+// void keyboard_post_init_kb(void) {
+//     // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
+// }
+// #endif
+
 layer_state_t layer_state_set_user(layer_state_t state) {
     return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
-}
+};
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    #ifdef OLED_ENABLE
-    if (record->event.pressed) {
-        set_keylog(keycode, record);
-        _active = true;
+    if (keycode == KC_ESC) {
+        _active = false;
     }
-    #endif // OLED_ENABLE
+    if (record->event.pressed) {
+        _active = true;
+        #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+        update_buffer(keycode, record);
+        #endif
+    }
+    return true;
+}
     // update_tri_layer(_LOWER, _RAISE, _ADJUST);
     // switch(biton32(layer_state)) {
     //     case _BASE:
@@ -308,10 +334,65 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     //     case _ADJUST:
     //         rgb_matrix_set_color_all(RGB_YELLOW);   break;
     // }
-    return true;
+
+////////////////////////////////////////////////////////
+//
+//  PROCESS RECORD
+
+static _tap_mod_t tm =  { .active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
+
+static bool _caps_lock = false;       // ***
+// static bool _toggle_slash = false;    // ToDo Fix Me
+
+bool set_capslock(void) {
+    register_code16(KC_LSFT);
+    return _caps_lock = true;
 }
 
-/*
+bool clear_capslock(void) {
+    unregister_code16(KC_LSFT);
+    return _caps_lock = false;
+}
+
+bool toggle_capslock(void) {
+    return (_caps_lock == true) ? clear_capslock() : set_capslock();
+}
+
+uint16_t deltaTau16(uint16_t t0, uint16_t t1) {
+    return (t1 > t0) ? t1 - t0 : t0 - t1;
+}
+
+uint32_t deltaTau32(uint32_t t0, uint32_t t1) {
+    return (t1 > t0) ? t1 - t0 : t0 - t1;
+}
+
+bool short_delay(uint32_t timer32) {
+    return (timer_elapsed32(timer32) < TAPPING_TERM);
+}
+
+bool long_delay(uint32_t timer32) {
+    return (timer_elapsed32(timer32) > TAPPING_TERM);
+}
+
+void send_kcode(uint16_t kc, uint16_t mods) {
+    if (mods != 0) {
+        set_mods(mods);
+    }
+    register_code16(kc);
+    wait_ms(1);
+    unregister_code16(kc);
+    if (mods != 0) {
+        clear_mods();
+    }
+}
+
+// void send_keycode(uint16_t kc) {    // ToDo: move to kaplan.c
+//     // tap_code_delay(1,kc);
+//     register_code16(kc);
+//     wait_ms(1);
+//     unregister_code16(kc);
+//}
+
 bool process_record_local(uint16_t keycode, keyrecord_t *record) {
     if (!tm.active) {
         if (record->event.pressed) {
@@ -328,17 +409,14 @@ bool process_record_local(uint16_t keycode, keyrecord_t *record) {
                     tm.km = MOD_BIT(keycode);
                     tm.timer32 = timer_read32();
                     tm.active = true;
-                    //tm_led(tm.active);
                     return false;
                 case KC_CAPSLCK:
                     toggle_capslock();
-                    //tm_led(tm.active);
                     return false;
                 case KC_ESC:
                     clear_capslock();           // releasing ESC clears special handling
                     tm.kc = tm.km = 0;
                     tm.active = false;
-                    //tm_led(tm.active);
                     return true;
                 default:
                     ; // return true; // redundant
@@ -350,14 +428,12 @@ bool process_record_local(uint16_t keycode, keyrecord_t *record) {
                 clear_capslock();               // releasing ESC clears special handling
                 tm.kc = tm.km = 0;
                 tm.active = false;
-                //tm_led(tm.active);
                 return true;
             }
-            if (keycode == KC_RSFT && tm.kc == KC_RSFT && long_tap(tm.timer32)) {
-                send_code16(KC_ENTER, tm.km);   // KC_RSFT long tap becomes KC_ENTER
+            if (keycode == KC_RSFT && tm.kc == KC_RSFT && long_delay(tm.timer32)) {
+                send_kcode(KC_ENTER, tm.km);   // releasing KC_RSFT long tap becomes KC_ENTER
                 tm.kc = tm.km = 0;
                 tm.active = false;
-                //tm_led(tm.active);
                 return false;
             }
             // return true; // redundant
@@ -382,17 +458,65 @@ bool process_record_local(uint16_t keycode, keyrecord_t *record) {
                     tm.timer32 = timer_read32();        // restart the tap timer and wait for the next key-down event
                     break;
                 default:
-                    send_code16(keycode, tm.km);        // tap sequence ends (key other than modifier was tapped)
+                    send_kcode(keycode, tm.km);        // tap sequence ends (key other than modifier was tapped)
                     tm.kc = tm.km = 0;                  // register the current keycode with accumulated modifiers
                     tm.active = false;                  // and reset state machine
-                    //tm_led(tm.active);
             }
             return false;
         }
     }
     return true;
 }
-*/
+
+
+////////////////////////////////////////////////////////
+//
+//  DEBUG LOGIC
+
+#if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+
+const char _keycode_to_name[60] = {
+    ' ', ' ', ' ', ' ', 'A', 'B', 'C', 'D', 'E', 'F',
+    'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+    'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
+    'r', 'e', 'b', 't', '_', '-', '=', '[', ']', '\\',
+    '#', ';', '\'', '`', ',', '.', '/', 'c', ' ', ' ' };
+
+    // also see https://docs.qmk.fm/#/squeezing_avr?id=oled-tweaks
+
+uint8_t keycode2char(uint16_t keycode) {
+    keycode = keycode & 0xFF;
+    if (keycode < KC_CAPS) {
+        return _keycode_to_name[keycode];
+    }
+    return _keycode_to_name[0];
+}
+#define bufferSize 64
+char _buffer[bufferSize];
+char* get_buffer(void) {
+    return &_buffer[0];
+};
+void clear_buffer(void) {
+  for (uint8_t i = 0; i < bufferSize ; i++) {
+      _buffer[i] = ' ';
+  }
+}
+void update_buffer( uint16_t keycode, keyrecord_t *record) {
+    uint16_t i = biton32(layer_state);
+    // const char *p = _layer_names[0];
+    // if (i < 7) {
+    //     p = _layer_names[i];
+    // };
+    char c = (char)(keycode2char( keycode));
+    snprintf( get_buffer(), bufferSize,
+        ":%d: %1d:%02d : K%04x : %c",
+        i, record->event.key.row, record->event.key.col, keycode, c);
+    #ifdef CONSOLE_ENABLE
+    uprintf("%s\n", get_buffer());
+    #endif
+}
+#endif
 
 ////////////////////////////////////////////////////////
 //
@@ -401,67 +525,36 @@ bool process_record_local(uint16_t keycode, keyrecord_t *record) {
 
 #ifdef OLED_ENABLE
 
-#define L_BASE 0
-#define L_LOWER 2
-#define L_RAISE 4
-#define L_ADJUST 8
-#define L_MOUSE 16
-#define L_RGB 32
+// #define L_BASE 0
+// #define L_LOWER 2
+// #define L_RAISE 4
+// #define L_ADJUST 8
+// #define L_MOUSE 16
+// #define L_RGB 32
 
-void oled_render_layer_state(void) {
-    oled_write_P(PSTR("Layer: "), false);
-    switch (layer_state) {
-        case L_BASE:
-            oled_write_ln_P(PSTR("Default"), false);
-            break;
-        case L_LOWER:
-            oled_write_ln_P(PSTR("Lower"), false);
-            break;
-        case L_RAISE:
-            oled_write_ln_P(PSTR("Raise"), false);
-            break;
-        case L_ADJUST:
-        case L_ADJUST|L_LOWER:
-        case L_ADJUST|L_RAISE:
-        case L_ADJUST|L_LOWER|L_RAISE:
-            oled_write_ln_P(PSTR("Adjust"), false);
-            break;
-        case L_MOUSE:
-            oled_write_ln_P(PSTR("Mouse"), false);
-        case L_RGB:
-            oled_write_ln_P(PSTR("RGB"), false);
-        default:
-            oled_write_ln_P(PSTR("other"), false);
-    }
+void oled_write(const char *data, bool invert);         // writes a char string
+void oled_write_char(const char data, bool invert);     // writes a single char
+void oled_write_ln(const char *data, bool invert);      // writes a line, advances page
+void oled_write_ln_P(const char *data, bool invert);    // writes a PSTR line
+
+// uint8_t const keylog_size = 24;
+// char keylog_str[24] = {};
+
+void oled_render_buffer(void) {
+    // called from oled_task_user or oled_task_kb
+    oled_write_char( '>', true);
+    oled_write_ln(get_buffer(),false);
 }
 
-char keylog_str[24] = {};
-
-const char _code_to_name[60] = {
-    ' ', ' ', ' ', ' ', 'a', 'b', 'c', 'd', 'e', 'f',
-    'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-    'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-    '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
-    'R', 'E', 'B', 'T', '_', '-', '=', '[', ']', '\\',
-    '#', ';', '\'', '`', ',', '.', '/', ' ', ' ', ' '};
-
-void set_keylog(uint16_t keycode, keyrecord_t *record) {
-  char name = ' ';
-    if ((keycode >= QK_MOD_TAP && keycode <= QK_MOD_TAP_MAX) ||
-        (keycode >= QK_LAYER_TAP && keycode <= QK_LAYER_TAP_MAX)) { keycode = keycode & 0xFF; }
-  if (keycode < 60) {
-    name = _code_to_name[keycode];
-  }
-
-  // update keylog
-  //   see https://docs.qmk.fm/#/squeezing_avr?id=oled-tweaks
-  snprintf(keylog_str, sizeof(keylog_str), "%dx%d, k%2d : %c",
-           record->event.key.row, record->event.key.col,
-           keycode, name);
-}
-
-void oled_render_keylog(void) {
-    oled_write(keylog_str, false);
+void oled_render_logo(void) {
+    static const char PROGMEM logo[] = {
+        // QMK logo
+        0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94,
+        0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4,
+        0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0x00
+    };
+    oled_clear();
+    oled_write_P(logo, false);
 }
 
 // void render_bootmagic_status(bool status) {
@@ -478,16 +571,6 @@ void oled_render_keylog(void) {
 //         oled_write_ln_P(logo[1][1], false);
 //     }
 // }
-
-void oled_render_logo(void) {
-    static const char PROGMEM logo[] = {
-        // Corne logo
-        0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94,
-        0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4,
-        0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0x00
-    };
-    oled_write_P(  logo, false);
-}
 
 #endif // OLED_ENABLE
 
