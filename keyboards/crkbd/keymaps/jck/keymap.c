@@ -112,7 +112,6 @@ qk_tap_dance_action_t tap_dance_actions[] = {
 
 #endif //  TAP_DANCE_ENABLE
 
-
 enum custom_keycodes {
     DUMMY = SAFE_RANGE,
     KC_T_SLASH,         // if true, KC_SLASH; if false, KC_UP
@@ -130,8 +129,11 @@ enum _layers {
   _LAST
 };
 
-const char _layer_names[7][2] = {
+const char _layer_names_str[7][2] = {
     "B", "L", "R", "A", "M", "r", "?"
+ };
+const char _layer_names_char[7]= {
+    'B', 'L', 'R', 'A', 'M', 'r', '?'
  };
 
 #define _PIPE      S(KC_PIPE)
@@ -231,7 +233,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 */
 
-
 // #define KEYBOARD_SYNC_A
 // #define KEYBOARD_SYNC_B
 // #define SPLIT_TRANSACTION_IDS_KB KEYBOARD_SYNC_A, KEYBOARD_SYNC_B
@@ -249,15 +250,12 @@ void update_buffer( uint16_t keycode, keyrecord_t *record);
 void oled_render_logo(void);
 void oled_render_buffer(void);
 #endif
-struct _last_event_t {
-    uint8_t  row, col, pressed;
-    uint16_t keycode;
-} _last_event;
 
+bool keyboard_post_init_b = false;
 void keyboard_post_init_user(void) {
     debug_enable=true;
     debug_mouse=true;
-    // debug_matrix=true;
+    // debug_matrix=true;   // keyboard matrix
     // debug_keyboard=true;
     #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
     clear_buffer();
@@ -265,18 +263,22 @@ void keyboard_post_init_user(void) {
     #ifdef OLED_ENABLE
     oled_render_logo();
     #endif
+    #ifdef RGB_ENABLE
+    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
+    rgb_matrix_sethsv_noeeprom(HSV_OFF);
+    uprintf("keyboard_post_init_user\n");
+    #endif
 }
-
-bool _active = false;
-
 // #ifdef RGB_MATRIX_ENABLE
 // void set_layer_color(int layer);
-// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
 // #endif // RGB_MATRIX_ENABLE
 
-// void keyboard_post_init_kb(void) {}
+void keyboard_post_init_kb(void) {
+    uprintf("keyboard_post_init_kb\n");
+}
 
 #ifdef OLED_ENABLE
+bool oled_show_keycodes = false;
 oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     if (!is_keyboard_master()) {
         return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
@@ -284,7 +286,7 @@ oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     return rotation;
 }
 bool oled_task_kb(void) {
-    if (_active) {
+    if (oled_show_keycodes) {
         oled_clear();
         oled_render_buffer();
     } else {
@@ -307,33 +309,48 @@ bool oled_task_kb(void) {
 // }
 // #endif
 
+struct _last_event_t {
+    uint8_t  row, col, pressed;
+    uint16_t keycode;
+} _last_event;
+
+
 layer_state_t layer_state_set_user(layer_state_t state) {
     return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
 };
 
-bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    if (keycode == KC_ESC) {
-        _active = false;
+#ifdef RGB_MATRIX_ENABLE
+// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
+extern void rgb_matrix_set_color(int index, uint8_t red, uint8_t green, uint8_t blue);
+extern void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
+
+// quantum/action_layer.h: #define get_highest_layer(state) biton(state)
+
+// what is g_led_config.matrix_co ??
+
+uint8_t previous = 255;
+void rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    uint8_t j = get_highest_layer(layer_state);
+    if (j != previous) {
+        previous = j;
+        uprintf("layer: %d\n",j);
+        for (uint8_t i = led_min; i <= led_max; i++) {
+            switch(j) {
+                case _BASE:   rgb_matrix_set_color(i, 0x00, 0x00, 0xFF);    break;    // blue
+                case _LOWER:  rgb_matrix_set_color(i, 0x00, 0xFF, 0x00);    break;    // green
+                case _RAISE:  rgb_matrix_set_color(i, 0xFF, 0xFF, 0x00);    break;    // yellow
+                case _ADJUST: rgb_matrix_set_color(i, 0x00, 0xFF, 0xFF);    break;    // cyan
+                default:   // rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);    break;
+                    if (rgb_matrix_get_flags() == LED_FLAG_NONE)
+                        rgb_matrix_set_color(i, 0, 0, 0);
+            }
+        }
     }
-    if (record->event.pressed) {
-        _active = true;
-        #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-        update_buffer(keycode, record);
-        #endif
-    }
-    return true;
 }
-    // update_tri_layer(_LOWER, _RAISE, _ADJUST);
-    // switch(biton32(layer_state)) {
-    //     case _BASE:
-    //         rgb_matrix_set_color_all(RGB_BLUE);     break;
-    //     case _LOWER:
-    //         rgb_matrix_set_color_all(RGB_GREEN);    break;
-    //     case _RAISE:
-    //         rgb_matrix_set_color_all(RGB_RED);      break;
-    //     case _ADJUST:
-    //         rgb_matrix_set_color_all(RGB_YELLOW);   break;
-    // }
+
+// void rgb_matrix_indicators_user(void) {
+// }
+#endif // RGB_MATRIX_ENABLE
 
 ////////////////////////////////////////////////////////
 //
@@ -386,16 +403,20 @@ void send_kcode(uint16_t kc, uint16_t mods) {
     }
 }
 
-// void send_keycode(uint16_t kc) {    // ToDo: move to kaplan.c
-//     // tap_code_delay(1,kc);
-//     register_code16(kc);
-//     wait_ms(1);
-//     unregister_code16(kc);
-//}
 
-bool process_record_local(uint16_t keycode, keyrecord_t *record) {
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if (keyboard_post_init_b == false) {
+        keyboard_post_init_user();
+        keyboard_post_init_b = true;
+    }
     if (!tm.active) {
         if (record->event.pressed) {
+            #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+            update_buffer(keycode, record);
+            #endif
+            #ifdef OLED_ENABE
+            oled_show_keycodes = true;
+            #endif
             switch (keycode) {                  // start tap-mod sequence
                 case KC_LSFT:                   //  by saving keycode and deferring handlig
                 case KC_LCTRL:
@@ -417,9 +438,12 @@ bool process_record_local(uint16_t keycode, keyrecord_t *record) {
                     clear_capslock();           // releasing ESC clears special handling
                     tm.kc = tm.km = 0;
                     tm.active = false;
+                    #ifdef OLED_ENABLE
+                    oled_show_keycodes = false;
+                    #endif
                     return true;
                 default:
-                    ; // return true; // redundant
+                    ; // return true;
             }
         }
     } else {
@@ -436,14 +460,23 @@ bool process_record_local(uint16_t keycode, keyrecord_t *record) {
                 tm.active = false;
                 return false;
             }
-            // return true; // redundant
+            // return true;
         } else {
             // record->event.pressed == true
+            #ifdef OLED_ENABLE
+            oled_show_keycodes = false;
+            #endif
             if (short_delay(tm.timer32)) {
                 if (keycode == KC_RSFT && tm.kc == KC_RSFT) {
                     keycode = KC_ENTER;         // KC_RSFT double-tap becomes KC_ENTER
                 }
             }
+            #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+            update_buffer(keycode, record);
+            #endif
+            #ifdef OLED_ENABE
+            oled_show_keycodes = true;
+            #endif
             switch (keycode) {
                 case KC_LSFT:
                 case KC_LCTRL:
@@ -503,15 +536,12 @@ void clear_buffer(void) {
   }
 }
 void update_buffer( uint16_t keycode, keyrecord_t *record) {
-    uint16_t i = biton32(layer_state);
-    // const char *p = _layer_names[0];
-    // if (i < 7) {
-    //     p = _layer_names[i];
-    // };
+    uint8_t i = previous;
+    char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
     char c = (char)(keycode2char( keycode));
     snprintf( get_buffer(), bufferSize,
-        ":%d: %1d:%02d : K%04x : %c",
-        i, record->event.key.row, record->event.key.col, keycode, c);
+        ":%d:%c %1d:%02d : K%04x : %c",
+        i, p, record->event.key.row, record->event.key.col, keycode, c);
     #ifdef CONSOLE_ENABLE
     uprintf("%s\n", get_buffer());
     #endif
@@ -525,20 +555,10 @@ void update_buffer( uint16_t keycode, keyrecord_t *record) {
 
 #ifdef OLED_ENABLE
 
-// #define L_BASE 0
-// #define L_LOWER 2
-// #define L_RAISE 4
-// #define L_ADJUST 8
-// #define L_MOUSE 16
-// #define L_RGB 32
-
 void oled_write(const char *data, bool invert);         // writes a char string
 void oled_write_char(const char data, bool invert);     // writes a single char
 void oled_write_ln(const char *data, bool invert);      // writes a line, advances page
 void oled_write_ln_P(const char *data, bool invert);    // writes a PSTR line
-
-// uint8_t const keylog_size = 24;
-// char keylog_str[24] = {};
 
 void oled_render_buffer(void) {
     // called from oled_task_user or oled_task_kb
@@ -548,7 +568,7 @@ void oled_render_buffer(void) {
 
 void oled_render_logo(void) {
     static const char PROGMEM logo[] = {
-        // QMK logo
+        // logo sits instide of font file
         0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94,
         0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4,
         0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0x00
@@ -578,106 +598,61 @@ void oled_render_logo(void) {
 #ifdef RGB_MATRIX_ENABLE
 ////////////////////////////////////////////////////////
 //
-//  RGB LOGIC
+//  RGB LOGIC   (keyboard dependent)
 //
 
-//  uint8_t rgb_matrix_map_row_column_to_led(uint8_t row, uint8_t column, uint8_t *led_i);
-
+// uint8_t rgb_matrix_map_row_column_to_led(uint8_t row, uint8_t column, uint8_t *led_i);
 // extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
 // extern bool g_suspend_state;
 // extern rgb_config_t rgb_matrix_config;
 
-extern void rgb_matrix_set_color(int index, uint8_t red, uint8_t green, uint8_t blue);
-extern void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
-
-RGB _palete[10] = { { RGB_OFF },    { RGB_WHITE} ,  { RGB_RED },
-                    { RGB_TEAL },   { RGB_ORANGE }, { RGB_MAGENTA },
-                    { RGB_BLUE },   { RGB_GREEN },  { RGB_YELLOW },
-                    { RGB_GOLDENROD }
+RGB _palete[13] = { { RGB_OFF },  { RGB_WHITE }, { RGB_RED }, { RGB_GREEN }, { RGB_BLUE },
+                    { RGB_CYAN }, { RGB_MAGENTA }, { RGB_YELLOW },
+                    { RGB_TEAL }, { RGB_ORANGE }, { RGB_GOLDENROD }, { RGB_CHARTREUSE },
+                    { RGB_PURPLE }
  };
 
-// void rgb_matrix_indicators_user(void) {
-//     uint8_t layer = biton32(layer_state);
-//     switch(layer) {
-//         case 0: rgb_matrix_set_color_all( RGB_WHITE ); break;
-//         case 1: rgb_matrix_set_color_all( RGB_RED ); break;
-//         case 2: rgb_matrix_set_color_all( RGB_GREEN ); break;
-//         case 3: rgb_matrix_set_color_all( RGB_BLUE ); break;
-//         case 4: rgb_matrix_set_color_all( RGB_YELLOW ); break;
-//         case 5: rgb_matrix_set_color_all( RGB_MAGENTA ); break;
-//         default: break;
-//     }
-// }
+enum _colors {
+    OFF, W, R, G, B, C, M, Y, T, O, GD, CE
+};
 
-// void set_layer_color(int layer) {
-//     switch(layer) {
-//         case 0: rgb_matrix_set_color_all( RGB_WHITE ); break;
-//         case 1: rgb_matrix_set_color_all( RGB_RED ); break;
-//         case 2: rgb_matrix_set_color_all( RGB_GREEN ); break;
-//         case 3: rgb_matrix_set_color_all( RGB_BLUE ); break;
-//         case 4: rgb_matrix_set_color_all( RGB_YELLOW ); break;
-//         case 5: rgb_matrix_set_color_all( RGB_MAGENTA ); break;
-//         case 6: rgb_matrix_set_color_all( RGB_TEAL ); break;
-//         default:
-//             if (rgb_matrix_get_flags() == LED_FLAG_NONE) {
-//                 rgb_matrix_set_color_all( RGB_GOLDENROD);
-//             }
-//     }
-// }
 uint8_t _layers[6][2][27] = {
     //    10: Space,  11: Lower, 12: Mouse                      13: ESC, 14: TAB, 15: SHFT
     //    20: Return, 21: Raise, 22: Mouse                      23: DEL, 24: Quote, 25: Return
     //    10 B  G  T  R  F  V  11 12 C  D  E  W  S  X  Z  A  Q  13 14 15 _  _  _  _  _  _
     //    20 N  H  Y  U  J  M  21 22 ,  K  I  O  L  .  /  ;  P  23 24 25 _  _  _  _  _  _
-    // [_BASE] =
+    [_BASE] =
     {   { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
         { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
     },
-    // [_LOWER]  =
+    [_LOWER] =
     {   { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 },
         { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 }
     },
-    // [_RAISE]  =
+    [_RAISE] =
     {   { 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 },
         { 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 }
     },
-    // [_ADJUST] =
+    [_ADJUST] =
     {   { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 },
         { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 }
     },
-    // [_MOUSE]  =
+    [_MOUSE]  =
     {   { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5 },
         { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5 }
     },
-    // [_RGB]    =
+    [_RGB] =
     {   { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6 },
         { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6 }
     }
 };
-
-
-// void set_layer_color(int layer) {
-//     switch(layer) {
-//         case 0: rgb_matrix_set_color_all( RGB_WHITE ); break;
-//         case 1: rgb_matrix_set_color_all( RGB_RED ); break;
-//         case 2: rgb_matrix_set_color_all( RGB_GREEN ); break;
-//         case 3: rgb_matrix_set_color_all( RGB_BLUE ); break;
-//         case 4: rgb_matrix_set_color_all( RGB_YELLOW ); break;
-//         case 5: rgb_matrix_set_color_all( RGB_MAGENTA ); break;
-//         case 6: rgb_matrix_set_color_all( RGB_TEAL ); break;
-//         default:
-//             if (rgb_matrix_get_flags() == LED_FLAG_NONE) {
-//                 rgb_matrix_set_color_all( RGB_GOLDENROD);
-//             }
-//     }
-// }
 
 #endif // RGB_MATRIX_ENABLE
 
 
 /////////////////////////////////////////////////////////
 //
-//  TAP DANCE LOGIC
+//  TAP DANCE   (keyboard idependent code)
 //
 //  qmk-firmware/docs/feature_tap_dance.md
 
@@ -711,6 +686,9 @@ _t_tap_state get_tap_dance_state(qk_tap_dance_state_t *state) {
         else return TRIPLE_HOLD;
     } else return TAP_DANCE_NO_MATCH; // Magic number. At some point this method will expand to work for more presses
 }
+
+//  Note:   here is no need to optimize the SWITCH/CASE statements below to save a few bytes,
+//          the gcc compiler optimizes the code itself -- it's amazingly efficient
 
 void l_bracket_finished(qk_tap_dance_state_t *state, void *user_data) {
     tap_state.state = get_tap_dance_state(state);
@@ -830,8 +808,8 @@ void slash_pipe_reset(qk_tap_dance_state_t *state, void *user_data) {
     tap_state.state = 0;
 }
 #endif //  TAP_DANCE_ENABLE
-/*
 
+/*
 split_util.h:
     extern volatile bool isLeftHand;
     void matrix_master_OLED_init(void);
@@ -844,7 +822,5 @@ split_util.c:
     static bool usbIsActive(void);
     __attribute__((weak)) bool is_keyboard_left(void);
     __attribute__((weak)) bool is_keyboard_master(void);
-
-
 */
 // EOF
