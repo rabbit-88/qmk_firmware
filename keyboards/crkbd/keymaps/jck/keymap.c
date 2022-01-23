@@ -237,10 +237,18 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 // #define KEYBOARD_SYNC_B
 // #define SPLIT_TRANSACTION_IDS_KB KEYBOARD_SYNC_A, KEYBOARD_SYNC_B
 
+// Keyboard State
+static bool keyboard_is_active = false;
+static _tap_mod_t tm =  { .active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
+//static bool _caps_lock = false;       // ***
+// static bool _toggle_slash = false;    // ToDo Fix Me
+
+
 ////////////////////////////////////////////////////////
 //
 //  DEBUG LOGIC
 //
+uint16_t flags = 0;
 #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
 char* get_buffer(void);
 void clear_buffer(void);
@@ -265,22 +273,18 @@ void keyboard_post_init_user(void) {
     oled_render_logo();
     #endif
     #ifdef RGB_ENABLE
-    // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); // ****
-    // rgb_matrix_sethsv_noeeprom(HSV_OFF);
-    // uprintf("keyboard_post_init_user\n");  // Nothing is printed ****
+    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); // ****
+    rgb_matrix_sethsv_noeeprom(HSV_OFF);
+    flags = flags || 0x01;
+    uprintf("keyboard_post_init_user\n");  // Nothing is printed ??
     #endif
 }
-// #ifdef RGB_MATRIX_ENABLE
-// void set_layer_color(int layer);
-// #endif // RGB_MATRIX_ENABLE
-bool _active = false;
 
-void keyboard_post_init_kb(void) {
-    uprintf("keyboard_post_init_kb\n");  // Nothing is printed ****
-}
+// void keyboard_post_init_kb(void) {
+//     flags = flags || 0x02;  // *** Is never called
+// }
 
 #ifdef OLED_ENABLE
-bool oled_show_keycodes = false;
 oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     if (!is_keyboard_master()) {
         return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
@@ -288,7 +292,7 @@ oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     return rotation;
 }
 bool oled_task_kb(void) {
-    if (_active) {
+    if (keyboard_is_active) {
         oled_clear();
         oled_render_buffer();
     } else {
@@ -305,17 +309,10 @@ bool oled_task_kb(void) {
 // void keyboard_pre_init_kb(void) {
 // }
 
-// #ifdef RGB_MATRIX_ENABLE
-// void keyboard_post_init_kb(void) {
-//     // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
-// }
-// #endif
-
 struct _last_event_t {
     uint8_t  row, col, pressed;
     uint16_t keycode;
 } _last_event;
-
 
 layer_state_t layer_state_set_user(layer_state_t state) {
     return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
@@ -330,23 +327,46 @@ extern void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
 
 // what is g_led_config.matrix_co ??
 
-uint8_t previous = 255; // **** DEBUG
-void rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+// void rgb_matrix_indicators_advanced_xxx(uint8_t led_min, uint8_t led_max) {
+//     uint8_t j = get_highest_layer(layer_state);
+//     if (j != previous) {
+//         previous = j;
+//         uprintf("set_color_layer: %d (min/max) %d - %d \n", j, led_min, led_max);
+//         for (uint8_t i = led_min; i <= led_max; i++) {
+//             switch(j) {
+//                 case _BASE:   rgb_matrix_set_color(i, 0x00, 0x00, 0xFF);    break;    // blue
+//                 case _LOWER:  rgb_matrix_set_color(i, 0x00, 0xFF, 0x00);    break;    // green
+//                 case _RAISE:  rgb_matrix_set_color(i, 0xFF, 0xFF, 0x00);    break;    // yellow
+//                 case _ADJUST: rgb_matrix_set_color(i, 0x00, 0xFF, 0xFF);    break;    // cyan
+//                 default:   // rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);    break;
+//                     if (rgb_matrix_get_flags() == LED_FLAG_NONE)
+//                         rgb_matrix_set_color(i, 0, 0, 0);
+//             }
+//         }
+//     }
+// }
+uint8_t previous = 255; //
+void set_layer_color(uint8_t layer) {
+    switch(layer) {
+        case _BASE:   rgb_matrix_set_color_all(0x00, 0x00, 0xFF);    break;    // blue
+        case _LOWER:  rgb_matrix_set_color_all(0x00, 0xFF, 0x00);    break;    // green
+        case _RAISE:  rgb_matrix_set_color_all(0xFF, 0xFF, 0x00);    break;    // yellow
+        case _ADJUST: rgb_matrix_set_color_all(0x00, 0xFF, 0xFF);    break;    // cyan
+        default:
+            if (rgb_matrix_get_flags() == LED_FLAG_NONE)
+                rgb_matrix_set_color_all(0, 0, 0);
+            else
+                rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
+    }
+}
+void rgb_matrix_indicators_kb(void) {
     uint8_t j = get_highest_layer(layer_state);
     if (j != previous) {
         previous = j;
-        uprintf("layer: %d\n",j);
-        for (uint8_t i = led_min; i <= led_max; i++) {
-            switch(j) {
-                case _BASE:   rgb_matrix_set_color(i, 0x00, 0x00, 0xFF);    break;    // blue
-                case _LOWER:  rgb_matrix_set_color(i, 0x00, 0xFF, 0x00);    break;    // green
-                case _RAISE:  rgb_matrix_set_color(i, 0xFF, 0xFF, 0x00);    break;    // yellow
-                case _ADJUST: rgb_matrix_set_color(i, 0x00, 0xFF, 0xFF);    break;    // cyan
-                default:   // rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);    break;
-                    if (rgb_matrix_get_flags() == LED_FLAG_NONE)
-                        rgb_matrix_set_color(i, 0, 0, 0);
-            }
-        }
+        #ifdef CONSOLE_ENABLE
+        uprintf("set_color_layer: %d \n", j);
+        #endif
+        set_layer_color(j);
     }
 }
 
@@ -358,24 +378,19 @@ void rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
 //
 //  PROCESS RECORD
 
-static _tap_mod_t tm =  { .active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
+// bool set_capslock(void) {
+//     register_code16(KC_LSFT);
+//     return _caps_lock = true;
+// }
 
-static bool _caps_lock = false;       // ***
-// static bool _toggle_slash = false;    // ToDo Fix Me
+// bool clear_capslock(void) {
+//     unregister_code16(KC_LSFT);
+//     return _caps_lock = false;
+// }
 
-bool set_capslock(void) {
-    register_code16(KC_LSFT);
-    return _caps_lock = true;
-}
-
-bool clear_capslock(void) {
-    unregister_code16(KC_LSFT);
-    return _caps_lock = false;
-}
-
-bool toggle_capslock(void) {
-    return (_caps_lock == true) ? clear_capslock() : set_capslock();
-}
+// bool toggle_capslock(void) {
+//     return (_caps_lock == true) ? clear_capslock() : set_capslock();
+// }
 
 uint16_t deltaTau16(uint16_t t0, uint16_t t1) {
     return (t1 > t0) ? t1 - t0 : t0 - t1;
@@ -405,32 +420,33 @@ void send_kcode(uint16_t kc, uint16_t mods) {
     }
 }
 
-bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    if (keycode == KC_ESC) {
-        _active = false;
-    }
-    if (record->event.pressed) {
-        _active = true;
-        #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-        update_buffer(keycode, record);
-        #endif
-    }
-    return true;
-}
+// bool process_record_(uint16_t keycode, keyrecord_t *record) {
+//     if (keycode == KC_ESC) {
+//         keyboard_is_active = false;
+//     }
+//     if (record->event.pressed) {
+//         keyboard_is_active = true;
+//         #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+//         update_buffer(keycode, record);
+//         #endif
+//     }
+//     return true;
+// }
 
-bool process_record_(uint16_t keycode, keyrecord_t *record) {
-    if (keyboard_post_init_b == false) {
-        keyboard_post_init_user();
-        keyboard_post_init_b = true;
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+    if (record->event.pressed) {
+        if (keycode == KC_ESC) {
+            keyboard_is_active = false;
+        }
+        else {
+            keyboard_is_active = true;
+            update_buffer(keycode, record);
+        }
     }
+    #endif
     if (!tm.active) {
         if (record->event.pressed) {
-            #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-            update_buffer(keycode, record);
-            #endif
-            #ifdef OLED_ENABE
-            oled_show_keycodes = true;
-            #endif
             switch (keycode) {                  // start tap-mod sequence
                 case KC_LSFT:                   //  by saving keycode and deferring handlig
                 case KC_LCTRL:
@@ -446,16 +462,8 @@ bool process_record_(uint16_t keycode, keyrecord_t *record) {
                     tm.active = true;
                     return false;
                 case KC_CAPSLCK:
-                    toggle_capslock();
+                    // toggle_capslock();
                     return false;
-                case KC_ESC:
-                    clear_capslock();           // releasing ESC clears special handling
-                    tm.kc = tm.km = 0;
-                    tm.active = false;
-                    #ifdef OLED_ENABLE
-                    oled_show_keycodes = false;
-                    #endif
-                    return true;
                 default:
                     ; // return true;
             }
@@ -463,7 +471,7 @@ bool process_record_(uint16_t keycode, keyrecord_t *record) {
     } else {
         if (!record->event.pressed) {
             if (keycode == KC_ESC) {
-                clear_capslock();               // releasing ESC clears special handling
+                // clear_capslock();              // releasing ESC clears special handling
                 tm.kc = tm.km = 0;
                 tm.active = false;
                 return true;
@@ -477,20 +485,11 @@ bool process_record_(uint16_t keycode, keyrecord_t *record) {
             // return true;
         } else {
             // record->event.pressed == true
-            #ifdef OLED_ENABLE
-            oled_show_keycodes = false;
-            #endif
             if (short_delay(tm.timer32)) {
                 if (keycode == KC_RSFT && tm.kc == KC_RSFT) {
-                    keycode = KC_ENTER;         // KC_RSFT double-tap becomes KC_ENTER
+                    keycode = KC_ENTER;        // KC_RSFT double-tap becomes KC_ENTER
                 }
             }
-            #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-            update_buffer(keycode, record);
-            #endif
-            #ifdef OLED_ENABE
-            oled_show_keycodes = true;
-            #endif
             switch (keycode) {
                 case KC_LSFT:
                 case KC_LCTRL:
@@ -554,9 +553,12 @@ void update_buffer( uint16_t keycode, keyrecord_t *record) {
     char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
     char c = (char)(keycode2char( keycode));
     snprintf( get_buffer(), bufferSize,
-        ":%d:%c %1d:%02d : K%04x : %c",
+        " %d%c %1d:%02d K%04x : %c",
         i, p, record->event.key.row, record->event.key.col, keycode, c);
     #ifdef CONSOLE_ENABLE
+    if (flags != 0)
+        uprintf("flags: %02X\n", flags);
+        flags = 0;
     uprintf("%s\n", get_buffer());
     #endif
 }
