@@ -251,12 +251,13 @@ void oled_render_logo(void);
 void oled_render_buffer(void);
 #endif
 
+extern debug_config_t debug_config;
 bool keyboard_post_init_b = false;
 void keyboard_post_init_user(void) {
-    debug_enable=true;
-    debug_mouse=true;
-    // debug_matrix=true;   // keyboard matrix
-    // debug_keyboard=true;
+    debug_config.enable=true;
+    debug_config.mouse=true;
+    // debug_config.matrix=true;   // keyboard matrix
+    // debug_config.eyboard=true;
     #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
     clear_buffer();
     #endif
@@ -264,17 +265,18 @@ void keyboard_post_init_user(void) {
     oled_render_logo();
     #endif
     #ifdef RGB_ENABLE
-    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
-    rgb_matrix_sethsv_noeeprom(HSV_OFF);
-    uprintf("keyboard_post_init_user\n");
+    // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); // ****
+    // rgb_matrix_sethsv_noeeprom(HSV_OFF);
+    // uprintf("keyboard_post_init_user\n");  // Nothing is printed ****
     #endif
 }
 // #ifdef RGB_MATRIX_ENABLE
 // void set_layer_color(int layer);
 // #endif // RGB_MATRIX_ENABLE
+bool _active = false;
 
 void keyboard_post_init_kb(void) {
-    uprintf("keyboard_post_init_kb\n");
+    uprintf("keyboard_post_init_kb\n");  // Nothing is printed ****
 }
 
 #ifdef OLED_ENABLE
@@ -286,7 +288,7 @@ oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     return rotation;
 }
 bool oled_task_kb(void) {
-    if (oled_show_keycodes) {
+    if (_active) {
         oled_clear();
         oled_render_buffer();
     } else {
@@ -328,7 +330,7 @@ extern void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
 
 // what is g_led_config.matrix_co ??
 
-uint8_t previous = 255;
+uint8_t previous = 255; // **** DEBUG
 void rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     uint8_t j = get_highest_layer(layer_state);
     if (j != previous) {
@@ -403,8 +405,20 @@ void send_kcode(uint16_t kc, uint16_t mods) {
     }
 }
 
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if (keycode == KC_ESC) {
+        _active = false;
+    }
+    if (record->event.pressed) {
+        _active = true;
+        #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+        update_buffer(keycode, record);
+        #endif
+    }
+    return true;
+}
+
+bool process_record_(uint16_t keycode, keyrecord_t *record) {
     if (keyboard_post_init_b == false) {
         keyboard_post_init_user();
         keyboard_post_init_b = true;
