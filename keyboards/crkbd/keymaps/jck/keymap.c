@@ -196,7 +196,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 //   }
 // }
 
-static bool keyboard_is_active = false;
+//static bool keyboard_is_active = false;
 static bool b_LSFT = false;
 
 
@@ -429,11 +429,13 @@ bool long_delay(uint32_t timer32) {
 }
 
 void send_kcode(uint16_t kc, uint16_t mods) {       // should we just OR the mods into the keycode instead?
-    set_mods(mods);
+    if (mods != 0)
+        set_mods(mods);
     register_code16(kc);
     wait_ms(1);
     unregister_code16(kc);
-    clear_mods();
+    if (mods != 0)
+        clear_mods();
 }
 
     /*
@@ -461,6 +463,7 @@ void send_kcode(uint16_t kc, uint16_t mods) {       // should we just OR the mod
             KC_RIGHT_GUI
         );
         //  modifiers: QK_LCTL | QK_LSFT | QK_LALT | QK_LGUI | QK_RCTL | QK_RSFT | QK_RALT | QK_RGUI;
+        //  Quantum Keycode QK start above 0x00FF == QK_BASIC_MAX
     */
 
 ////////////////////////////////////////////////////////
@@ -476,109 +479,98 @@ typedef struct {
 
 static _last_key_pressed SQ =  { .active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
 
+void clear_state(void) {
+    SQ.active = false;
+    SQ.kc = SQ.km = 0;
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+    // if (record->event.pressed) {
+    //     switch (keycode) {
+    //         case KC_ESC: keyboard_is_active = false;
+    //             update_buffer(keycode, record, 'E');
+    //             break;
+    //         case KC_TAB:
+    //             rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
+    //             update_buffer(keycode, record, 'T');
+    //         default:
+    //             keyboard_is_active = true;
+    //     }
+    // }
     if (record->event.pressed) {
-        switch (keycode) {
-            case KC_ESC: keyboard_is_active = false;
-                update_buffer(keycode, record, 'E');
-                break;
-            case KC_TAB:
-                rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
-                update_buffer(keycode, record, 'T');
-            default:
-                keyboard_is_active = true;
-        }
-    }
-    #endif
-    if (!SQ.active) {
-        if (record->event.pressed) {
-            if  (b_LSFT == true) {
-                if (keycode == RGB_HUI)
-                        keycode = RGB_HUD;
-                if (keycode == RGB_VAI)
-                        keycode = RGB_VAD;
-                if (keycode == RGB_SAI)
-                        keycode = RGB_SAD;
-                if (keycode == RGB_SPI)
-                        keycode = RGB_SPD;
+        if (keycode > QK_BASIC_MAX)
+            return true;
+        if (SQ.active && short_delay(SQ.timer32)) {
+            if (keycode == KC_RSFT && SQ.kc == KC_RSFT) {
+                clear_state();
+                keycode = KC_ENTER;         // KC_RSFT double-tap becomes KC_ENTER
             }
-            if (IS_MOD(keycode) || keycode == KC_LSFT || keycode == KC_RSFT) {
-                SQ.kc = keycode;
-                SQ.km = MOD_BIT(keycode);
-                SQ.timer32 = timer_read32();
-                SQ.active = true;
-                #ifdef CONSOLE_ENABLE
-                dprintf("M: %04x %x\n", SQ.kc, SQ.km);
-                update_buffer(keycode, record, 'M'); //**
-                #endif
-                return false;
-            } else {
-                #ifdef CONSOLE_ENABLE
-                update_buffer(keycode, record, 'A'); //**
-                #endif
+            if (keycode == KC_LSFT && SQ.kc == KC_LSFT) {
+                clear_state();
+                b_LSFT = true;              // KC_LSFT double-tap becomes CAPS-LOCK
+                dprintf("caps-lock 2\n");
             }
         }
-    } else {
-        if (!record->event.pressed) {
-            if (keycode == KC_ESC) {            // releasing ESC clears state-machine
-                SQ.kc = SQ.km = 0;
-                SQ.active = false;
-                if (b_LSFT == true)
-                    dprintf("caps-lock off 1\n");
-                b_LSFT = false;
-                //#ifdef CONSOLE_ENABLE
-                update_buffer(keycode, record, 'e'); //**
-                //#endif
-            }
-            if (keycode == KC_RSFT && SQ.kc == KC_RSFT && long_delay(SQ.timer32)) {
-                send_kcode(KC_ENTER, SQ.km);    // releasing KC_RSFT long tap becomes KC_ENTER
-                SQ.kc = SQ.km = 0;
-                SQ.active = false;
-                return false;
-            }
-            if (keycode == KC_LSFT && SQ.kc == KC_LSFT && long_delay(SQ.timer32)) {
-                b_LSFT = true;                  // releasing KC_LSFT long tap becomes CAPS-LOCK
-                //#ifdef CONSOLE_ENABLE
-                dprintf("caps-lock 1\n");
-                //#endif
-            }
-        } else {
-            // keycode pressed, state-machine is active, last key pressed was SQ.kc
-            if (short_delay(SQ.timer32)) {
-                if (keycode == KC_RSFT) {
-                    keycode = KC_ENTER;         // KC_RSFT double-tap becomes KC_ENTER
-                }
-                if (keycode == KC_LSFT) {
-                    b_LSFT = true;              // KC_LSFT double-tap becomes CAPS-LOCK
-                    //#ifdef CONSOLE_ENABLE
-                    dprintf("caps-lock 2\n");
-                    //#endif
-                }
-            }
-            if IS_MOD(keycode) {
-                SQ.kc = keycode;
-                dprintf("m: %04x %x\n", SQ.kc, MOD_BIT(keycode));
-                SQ.km = SQ.km | MOD_BIT(keycode);   // two or more modifiers have been sequentially tapped
-                SQ.timer32 = timer_read32();        // restart the tap timer and wait for the next key-down event
-                //#ifdef CONSOLE_ENABLE
-                update_buffer(keycode, record, 'm'); //**
-                //#endif
-                return true;
-            }
-            if (b_LSFT == true || SQ.kc == KC_LSFT) {
-                dprintf("l: %04x %x\n", SQ.kc, MOD_BIT(keycode));
-                SQ.km = SQ.km | MOD_BIT(KC_LSFT);
-                dprintf("caps-lock 3\n");
-            }
-            send_kcode(keycode, SQ.km);         // tap sequence ends (key other than modifier was tapped)
-            SQ.kc = SQ.km = 0;                  // register the current keycode with accumulated modifiers
-            SQ.active = false;                  // and reset state machine
-            //#ifdef CONSOLE_ENABLE
-            update_buffer(keycode, record, 'a'); //**
-            //#endif
+        if (IS_MOD(keycode) || keycode == KC_LSFT || keycode == KC_RSFT) {
+            SQ.active = true;
+            SQ.kc = keycode;
+            SQ.km = MOD_BIT(keycode);
+            SQ.timer32 = timer_read32();
+            dprintf("M: %04x %x\n", SQ.kc, SQ.km);
+            update_buffer(keycode, record, 'M');
             return false;
         }
+        if  (b_LSFT == true) {
+            if (keycode == RGB_HUI)
+                    keycode = RGB_HUD;
+            if (keycode == RGB_VAI)
+                    keycode = RGB_VAD;
+            if (keycode == RGB_SAI)
+                    keycode = RGB_SAD;
+            if (keycode == RGB_SPI)
+                    keycode = RGB_SPD;
+        }
+    }
+    if (!record->event.pressed) {
+        if (keycode == KC_ESC) {            // releasing ESC clears state-machine
+            clear_state();
+            if (b_LSFT == true)
+                dprintf("caps-lock off\n");
+            b_LSFT = false;
+            update_buffer(keycode, record, 'e');
+        }
+        if (keycode == KC_RSFT && SQ.active && SQ.kc == KC_RSFT && long_delay(SQ.timer32)) {
+            send_kcode(KC_ENTER, SQ.km);    // releasing KC_RSFT long tap becomes KC_ENTER
+            clear_state();
+            return false;
+        }
+        if (keycode == KC_LSFT && SQ.active && SQ.kc == KC_LSFT && long_delay(SQ.timer32)) {
+            b_LSFT = true;                  // releasing KC_LSFT long tap becomes CAPS-LOCK
+            dprintf("caps-lock 1\n");
+            return false;
+        }
+    }
+    if (record->event.pressed) {
+        if (SQ.active && short_delay(SQ.timer32)) {
+            if (keycode == KC_RSFT && SQ.kc == KC_RSFT) {
+                clear_state();
+                keycode = KC_ENTER;         // KC_RSFT double-tap becomes KC_ENTER
+            }
+            if (keycode == KC_LSFT && SQ.kc == KC_LSFT) {
+                clear_state();
+                b_LSFT = true;              // KC_LSFT double-tap becomes CAPS-LOCK
+                dprintf("caps-lock 2\n");
+            }
+        }
+        if (b_LSFT == true) {
+            SQ.km = SQ.km | MOD_BIT(KC_LSFT);
+            dprintf("l: %04x %x\n", SQ.kc, MOD_BIT(keycode));
+            dprintf("caps-shift\n");
+        }
+        update_buffer(keycode, record, 'A'); //**
+        send_kcode(keycode, SQ.km);         // tap sequence ends (key other than modifier was tapped)
+        clear_state();                      // reset state machine
+        return false;
     }
     return true;
 }
