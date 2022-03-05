@@ -181,20 +181,22 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
 };
 
-// #define KEYBOARD_SYNC_A
-// #define KEYBOARD_SYNC_B
-// #define SPLIT_TRANSACTION_IDS_KB KEYBOARD_SYNC_A, KEYBOARD_SYNC_B
+/*
+#define KEYBOARD_SYNC_A
+#define KEYBOARD_SYNC_B
+#define SPLIT_TRANSACTION_IDS_KB KEYBOARD_SYNC_A, KEYBOARD_SYNC_B
 
-// keyrecord_t record {
-//   keyevent_t event {
-//     keypos_t key {
-//       uint8_t col
-//       uint8_t row
-//     }
-//     bool     pressed
-//     uint16_t time
-//   }
-// }
+keyrecord_t record {
+  keyevent_t event {
+    keypos_t key {
+      uint8_t col
+      uint8_t row
+    }
+    bool     pressed
+    uint16_t time
+  }
+}
+*/
 
 //static bool keyboard_is_active = false;
 static bool b_LSFT = false;
@@ -208,13 +210,13 @@ uint16_t flags = 0;
 #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
 char* get_buffer(void);
 void clear_buffer(void);
-void update_buffer( uint16_t keycode, keyrecord_t *record, char c);
+void update_buffer( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km);
+
 #endif
 #ifdef OLED_ENABLE
 void oled_render_logo(void);
 void oled_render_buffer(void);
 #endif
-
 
 
 ///////////////////////////////////////////////////////
@@ -244,10 +246,8 @@ bool keyboard_post_init_b = false;
 void keyboard_post_init_user(void) {
     debug_config.enable=true;
     debug_config.mouse=true;
-    #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+    #if defined(OLED_ENABLE)
     clear_buffer();
-    #endif
-    #ifdef OLED_ENABLE
     oled_render_logo();
     #endif
     #ifdef RGB_ENABLE
@@ -282,14 +282,13 @@ void housekeeping_task_user(void) {
         keyboard_post_init_user();
         flags = flags | 0x04;
         #ifdef CONSOLE_ENABLE
-        dprintf("housekeeping: %x\n", flags);
+        dprintf("HKT: %x\n", flags);
         #endif
         keyboard_post_init_b = true;
         debug_config.enable = true;
         debug_config.matrix = false;
         debug_config.mouse = false;
         debug_config.keyboard = false;
-
     }
 }
 
@@ -311,102 +310,6 @@ bool oled_task_kb(void) {
 }
 #endif // OLED_ENABLE
 
-struct _last_event_t {
-    uint8_t  row, col, pressed;
-    uint16_t keycode;
-} _last_event;
-
-layer_state_t layer_state_set_user(layer_state_t state) {
-    // QMK documentation indicates rgblight_setrgb( red, green, blue) can be called here
-    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
-};
-
-#ifdef RGB_MATRIX_ENABLE
-// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
-extern void rgb_matrix_set_color(int index, uint8_t red, uint8_t green, uint8_t blue);
-extern void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
-
-// quantum/action_layer.h: #define get_highest_layer(state) biton(state)
-
-// what is g_led_config.matrix_co ??
-
-// void rgb_matrix_indicators_advanced_xxx(uint8_t led_min, uint8_t led_max) { ... }
-/*
-
-    IS_LAYER_ON_STATE(state, layer)
-    IS_LAYER_OFF_STATE(state, layer)
-    IS_LAYER_ON(layer)
-    IS_LAYER_OFF(layer)
-
-    layer_state_t layer_state_set_kb(layer_state_t state)
-    layer_state_t layer_state_set_user(layer_state_t state)
-    state is the bitmask of active layers
-
-    This sets up a 32 bit structure that we can store settings with in memory,
-    and write to the EEPROM. Using this removes the need to define variables,
-    since they’re defined in this structure
-
-    typedef union {
-        uint32_t raw;
-        struct {
-            bool rgb_layer_change :1;
-        };
-    } user_config_t;
-
-    user_config_t user_config;
-
-    user_config.raw = eeconfig_read_user();
-    if (user_config.rgb_layer_change) {
-        rgblight_enable_noeeprom();
-        rgblight_sethsv_noeeprom_cyan();
-        rgblight_mode_noeeprom(1);
-    }
-
-    void eeconfig_init_user(void) {  // EEPROM is getting reset!
-        user_config.raw = 0;
-        user_config.rgb_layer_change = true; // We want this enabled by default
-        eeconfig_update_user(user_config.raw); // Write default value to EEPROM now
-
-        // use the non noeeprom versions, to write these values to EEPROM too
-        rgblight_enable(); // Enable RGB by default
-        rgblight_sethsv_cyan();  // Set it to CYAN by default
-        rgblight_mode(1); // set to solid by default
-    }
-    see https://docs.qmk.fm/#/custom_quantum_functions?id=example-keyboard_pre_init_user-implementation
-
-    deferred executor callbacks available!
-*/
-
-
-uint8_t previous_layer = 255; //
-void set_layer_color(uint8_t layer) {
-    switch(layer) {
-        case _BASE:   rgb_matrix_set_color_all(0x00, 0x00, 0xFF);    break;    // blue
-        case _LOWER:  rgb_matrix_set_color_all(0x00, 0xFF, 0x00);    break;    // green
-        case _RAISE:  rgb_matrix_set_color_all(0xFF, 0xFF, 0x00);    break;    // yellow
-        case _ADJUST: rgb_matrix_set_color_all(0x00, 0xFF, 0xFF);    break;    // cyan
-        default:
-            if (rgb_matrix_get_flags() == LED_FLAG_NONE)
-                rgb_matrix_set_color_all(0, 0, 0);
-            else
-                rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
-    }
-}
-void rgb_matrix_indicators_kb(void) {
-    // kb() implementations responsible for calling user()
-    uint8_t j = get_highest_layer(layer_state);
-    if (j != previous_layer) {
-        previous_layer = j;
-        #ifdef CONSOLE_ENABLE
-        uprintf("Layer: %d \n", j);
-        #endif
-        set_layer_color(j);
-    }
-}
-
-// void rgb_matrix_indicators_user(void) {
-// }
-#endif // RGB_MATRIX_ENABLE
 
 ////////////////////////////////////////////////////////
 //
@@ -438,33 +341,29 @@ void send_kcode(uint16_t kc, uint16_t mods) {       // should we just OR the mod
         clear_mods();
 }
 
-    /*
-        enum hid_keyboard_keypad_usage {
-            KC_NO = 0x00,
-            KC_ROLL_OVER,
-            KC_POST_FAIL,
-            KC_UNDEFINED,
-            KC_A,
-            ...
-            KC_Z,
-            ...
-            KC_LEFT,  // 0x50
-            ...
-            KC_F21,  // 0x70
-            ...
-            // Modifiers
-            KC_LEFT_CTRL = 0xE0,
-            KC_LEFT_SHIFT,
-            KC_LEFT_ALT,
-            KC_LEFT_GUI,
-            KC_RIGHT_CTRL,
-            KC_RIGHT_SHIFT,
-            KC_RIGHT_ALT,
-            KC_RIGHT_GUI
-        );
-        //  modifiers: QK_LCTL | QK_LSFT | QK_LALT | QK_LGUI | QK_RCTL | QK_RSFT | QK_RALT | QK_RGUI;
-        //  Quantum Keycode QK start above 0x00FF == QK_BASIC_MAX
-    */
+layer_state_t layer_state_set_user(layer_state_t state) {
+    // QMK documentation indicates rgblight_setrgb( red, green, blue) can be called here
+    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+};
+
+extern layer_state_t layer_state;   // quantum/action_layer.c
+
+layer_state_t get_layer_state(void) { return layer_state; }
+
+uint8_t get_top_layer_bit(void) {
+    return get_highest_layer( get_layer_state()); }
+
+uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
+    uint8_t r = 0;              // r will be log-base-2(v)
+    while (value>>=1) r++;
+    return r;
+}
+
+/*
+    ../quantum//action_layer.h:# define get_highest_layer(state) biton(state)
+    ../quantum//action_layer.h:# define get_highest_layer(state) biton16(state)
+    ../quantum//action_layer.h:# define get_highest_layer(state) biton32(state)
+*/
 
 ////////////////////////////////////////////////////////
 //
@@ -479,69 +378,87 @@ typedef struct {
 
 static _last_key_pressed SQ =  { .active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
 
-void clear_state(void) {
+void reset_SQ(void) {
     SQ.active = false;
     SQ.kc = SQ.km = 0;
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    // if (record->event.pressed) {
-    //     switch (keycode) {
-    //         case KC_ESC: keyboard_is_active = false;
-    //             update_buffer(keycode, record, 'E');
-    //             break;
-    //         case KC_TAB:
-    //             rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
-    //             update_buffer(keycode, record, 'T');
-    //         default:
-    //             keyboard_is_active = true;
-    //     }
-    // }
     if (record->event.pressed) {
-        if (keycode > QK_BASIC_MAX)
+        update_buffer('v', keycode, record, SQ.kc, SQ.km);
+        if (keycode > QK_BASIC_MAX)                         // no additional processing for quatum keycode
             return true;
-        if (SQ.active && short_delay(SQ.timer32)) {
+        if (SQ.active && short_delay(SQ.timer32)) {         // process double-taps
             if (keycode == KC_RSFT && SQ.kc == KC_RSFT) {
-                clear_state();
-                keycode = KC_ENTER;         // KC_RSFT double-tap becomes KC_ENTER
+                keycode = KC_ENTER;                         // KC_RSFT double-tap becomes KC_ENTER
+                reset_SQ();
             }
             if (keycode == KC_LSFT && SQ.kc == KC_LSFT) {
-                clear_state();
-                b_LSFT = true;              // KC_LSFT double-tap becomes CAPS-LOCK
+                b_LSFT = true;                              // KC_LSFT double-tap becomes CAPS-LOCK
+                reset_SQ();
                 dprintf("caps-lock 2\n");
             }
         }
-        if (IS_MOD(keycode) || keycode == KC_LSFT || keycode == KC_RSFT) {
+        if  (b_LSFT == true) {                              // process implied SHIFT events (caps-lock)
+            if (keycode == RGB_HUI) keycode = RGB_HUD;      // shift + HUI becomes HUD, etc.
+            if (keycode == RGB_VAI) keycode = RGB_VAD;
+            if (keycode == RGB_SAI) keycode = RGB_SAD;
+            if (keycode == RGB_SPI) keycode = RGB_SPD;
+        }
+        if (keycode >= KC_LEFT_CTRL && keycode <= KC_RIGHT_GUI) {   // process standard modifers
+            if (keycode == KC_RIGHT_CTRL)  SQ.km |= MOD_BIT(KC_RIGHT_CTRL);
+            if (keycode == KC_RIGHT_SHIFT) SQ.km |= MOD_BIT(KC_RIGHT_SHIFT);
+            if (keycode == KC_RIGHT_ALT)   SQ.km |= MOD_BIT(KC_RIGHT_ALT);
+            if (keycode == KC_RIGHT_GUI)   SQ.km |= MOD_BIT(KC_RIGHT_GUI);
+            if (keycode == KC_LEFT_CTRL)   SQ.km |= MOD_BIT(KC_LEFT_CTRL);
+            if (keycode == KC_LEFT_SHIFT)  SQ.km |= MOD_BIT(KC_LEFT_SHIFT);
+            if (keycode == KC_LEFT_ALT)    SQ.km |= MOD_BIT(KC_LEFT_ALT);
+            if (keycode == KC_LEFT_GUI)    SQ.km |= MOD_BIT(KC_LEFT_GUI);
+            // if (keycode & QK_RMODS_MIN) {
+            //     if (keycode & QK_RCTL) SQ.km |= MOD_BIT(KC_RIGHT_CTRL);
+            //     if (keycode & QK_RSFT) SQ.km |= MOD_BIT(KC_RIGHT_SHIFT);
+            //     if (keycode & QK_RALT) SQ.km |= MOD_BIT(KC_RIGHT_ALT);
+            //     if (keycode & QK_RGUI) SQ.km |= MOD_BIT(KC_RIGHT_GUI);
+            // } else {
+            //     if (keycode & QK_LCTL) SQ.km |= MOD_BIT(KC_LEFT_CTRL);
+            //     if (keycode & QK_LSFT) SQ.km |= MOD_BIT(KC_LEFT_SHIFT);
+            //     if (keycode & QK_LALT) SQ.km |= MOD_BIT(KC_LEFT_ALT);
+            //     if (keycode & QK_LGUI) SQ.km |= MOD_BIT(KC_LEFT_GUI);
+            // }                                               // QMK keycodes starting with 0xE0: KC_LEFT_CTRL, KC_LEFT_SHIFT, KC_LEFT_ALT, KC_LEFT_GUI, KC_RIGHT_CTRL, KC_RIGHT_SHIFT, KC_RIGHT_ALT, KC_RIGHT_GUI
+            SQ.timer32 = timer_read32();
+            SQ.active = true;
+            SQ.kc = keycode;
+            update_buffer('m', keycode, record, SQ.kc, SQ.km);
+            return false;
+        }
+        if (IS_MOD(keycode)) {              // process other modifers
             SQ.active = true;
             SQ.kc = keycode;
             SQ.km = MOD_BIT(keycode);
             SQ.timer32 = timer_read32();
-            dprintf("M: %04x %x\n", SQ.kc, SQ.km);
-            update_buffer(keycode, record, 'M');
+            update_buffer('?', keycode, record, SQ.kc, SQ.km);
             return false;
         }
-        if  (b_LSFT == true) {
-            if (keycode == RGB_HUI)
-                    keycode = RGB_HUD;
-            if (keycode == RGB_VAI)
-                    keycode = RGB_VAD;
-            if (keycode == RGB_SAI)
-                    keycode = RGB_SAD;
-            if (keycode == RGB_SPI)
-                    keycode = RGB_SPD;
+        if (b_LSFT == true) {               // process caps-lock
+            SQ.km = SQ.km | MOD_BIT(KC_LSFT);
+            update_buffer('c', keycode, record, SQ.kc, SQ.km);
         }
+        update_buffer('A', keycode, record, SQ.kc, SQ.km);
+        send_kcode(keycode, SQ.km);         // tap sequence ends (key other than modifier was tapped)
+        reset_SQ();                         // reset state machine
+        return false;
     }
     if (!record->event.pressed) {
         if (keycode == KC_ESC) {            // releasing ESC clears state-machine
-            clear_state();
+            reset_SQ();
             if (b_LSFT == true)
                 dprintf("caps-lock off\n");
             b_LSFT = false;
-            update_buffer(keycode, record, 'e');
+            update_buffer('e', keycode, record, SQ.kc, SQ.km);
         }
         if (keycode == KC_RSFT && SQ.active && SQ.kc == KC_RSFT && long_delay(SQ.timer32)) {
             send_kcode(KC_ENTER, SQ.km);    // releasing KC_RSFT long tap becomes KC_ENTER
-            clear_state();
+            reset_SQ();
             return false;
         }
         if (keycode == KC_LSFT && SQ.active && SQ.kc == KC_LSFT && long_delay(SQ.timer32)) {
@@ -549,28 +466,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             dprintf("caps-lock 1\n");
             return false;
         }
-    }
-    if (record->event.pressed) {
-        if (SQ.active && short_delay(SQ.timer32)) {
-            if (keycode == KC_RSFT && SQ.kc == KC_RSFT) {
-                clear_state();
-                keycode = KC_ENTER;         // KC_RSFT double-tap becomes KC_ENTER
-            }
-            if (keycode == KC_LSFT && SQ.kc == KC_LSFT) {
-                clear_state();
-                b_LSFT = true;              // KC_LSFT double-tap becomes CAPS-LOCK
-                dprintf("caps-lock 2\n");
-            }
-        }
-        if (b_LSFT == true) {
-            SQ.km = SQ.km | MOD_BIT(KC_LSFT);
-            dprintf("l: %04x %x\n", SQ.kc, MOD_BIT(keycode));
-            dprintf("caps-shift\n");
-        }
-        update_buffer(keycode, record, 'A'); //**
-        send_kcode(keycode, SQ.km);         // tap sequence ends (key other than modifier was tapped)
-        clear_state();                      // reset state machine
-        return false;
     }
     return true;
 }
@@ -603,21 +498,21 @@ uint8_t keycode2char(uint16_t keycode) {
 char _buffer[bufferSize];
 char* get_buffer(void) {
     return &_buffer[0];
-};
+}
 void clear_buffer(void) {
   for (uint8_t i = 0; i < bufferSize ; i++) {
       _buffer[i] = ' ';
   }
 }
 
-void update_buffer( uint16_t keycode, keyrecord_t *record, char tag) {
+void update_buffer( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km) {
     #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-    uint8_t i = previous_layer;
+    uint8_t i = logb2(get_top_layer_bit());
     char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
     char c = (char)(keycode2char( keycode));
     snprintf( get_buffer(), bufferSize,
-        "%c: %d %c %1d:%02d K%04x : %c",
-        tag, i, p, record->event.key.row, record->event.key.col, keycode, c);
+        "%c: %d %c %1d:%02d K%04x : %c %04x %04x",
+        tag, i, p, record->event.key.row, record->event.key.col, keycode, c, kc, km) ;
     if (flags != 0) {
         dprintf("flags: %02X\n", flags);
         flags = 0;
@@ -674,6 +569,7 @@ void oled_render_logo(void) {
 #endif // OLED_ENABLE
 
 
+/*
 #ifdef RGB_MATRIX_ENABLE
 ////////////////////////////////////////////////////////
 //
@@ -695,7 +591,7 @@ enum _colors {
     OFF, W, R, G, B, C, M, Y, T, O, GD, CE
 };
 
-uint8_t _layers[6][2][27] = {
+uint8_t _rgb_layers[6][2][27] = {
     //    10: Space,  11: Lower, 12: Mouse                      13: ESC, 14: TAB, 15: SHFT
     //    20: Return, 21: Raise, 22: Mouse                      23: DEL, 24: Quote, 25: Return
     //    10 B  G  T  R  F  V  11 12 C  D  E  W  S  X  Z  A  Q  13 14 15 _  _  _  _  _  _
@@ -723,7 +619,7 @@ uint8_t _layers[6][2][27] = {
 };
 
 #endif // RGB_MATRIX_ENABLE
-
+*/
 
 /////////////////////////////////////////////////////////
 //
@@ -899,4 +795,126 @@ split_util.c:
     __attribute__((weak)) bool is_keyboard_left(void);
     __attribute__((weak)) bool is_keyboard_master(void);
 */
+
+    /*
+        enum hid_keyboard_keypad_usage {
+            KC_NO = 0x00,
+            KC_ROLL_OVER,
+            KC_POST_FAIL,
+            KC_UNDEFINED,
+            KC_A,
+            ...
+            KC_Z,
+            ...
+            KC_LEFT,  // 0x50
+            ...
+            KC_F21,  // 0x70
+            ...
+            // Modifiers
+            KC_LEFT_CTRL = 0xE0,
+            KC_LEFT_SHIFT,
+            KC_LEFT_ALT,
+            KC_LEFT_GUI,
+            KC_RIGHT_CTRL,
+            KC_RIGHT_SHIFT,
+            KC_RIGHT_ALT,
+            KC_RIGHT_GUI
+        );
+        //  modifiers: QK_LCTL | QK_LSFT | QK_LALT | QK_LGUI | QK_RCTL | QK_RSFT | QK_RALT | QK_RGUI;
+        //  Quantum Keycode QK start above 0x00FF == QK_BASIC_MAX
+    */
+
+
+// quantum/action_layer.h: #define get_highest_layer(state) biton(state)
+
+// what is g_led_config.matrix_co ??
+
+// void rgb_matrix_indicators_advanced_xxx(uint8_t led_min, uint8_t led_max) { ... }
+/*
+
+    IS_LAYER_ON_STATE(state, layer)
+    IS_LAYER_OFF_STATE(state, layer)
+    IS_LAYER_ON(layer)
+    IS_LAYER_OFF(layer)
+
+    layer_state_t layer_state_set_kb(layer_state_t state)
+    layer_state_t layer_state_set_user(layer_state_t state)
+    state is the bitmask of active layers
+
+    This sets up a 32 bit structure that we can store settings with in memory,
+    and write to the EEPROM. Using this removes the need to define variables,
+    since they’re defined in this structure
+
+    typedef union {
+        uint32_t raw;
+        struct {
+            bool rgb_layer_change :1;
+        };
+    } user_config_t;
+
+    user_config_t user_config;
+
+    user_config.raw = eeconfig_read_user();
+    if (user_config.rgb_layer_change) {
+        rgblight_enable_noeeprom();
+        rgblight_sethsv_noeeprom_cyan();
+        rgblight_mode_noeeprom(1);
+    }
+
+    void eeconfig_init_user(void) {  // EEPROM is getting reset!
+        user_config.raw = 0;
+        user_config.rgb_layer_change = true; // We want this enabled by default
+        eeconfig_update_user(user_config.raw); // Write default value to EEPROM now
+
+        // use the non noeeprom versions, to write these values to EEPROM too
+        rgblight_enable(); // Enable RGB by default
+        rgblight_sethsv_cyan();  // Set it to CYAN by default
+        rgblight_mode(1); // set to solid by default
+    }
+    see https://docs.qmk.fm/#/custom_quantum_functions?id=example-keyboard_pre_init_user-implementation
+
+    deferred executor callbacks available!
+*/
+
+/*
+#ifdef RGB_MATRIX_ENABLE
+// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
+extern void rgb_matrix_set_color(int index, uint8_t red, uint8_t green, uint8_t blue);
+extern void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
+
+uint8_t previous_layer = 255; //
+void set_layer_color(uint8_t layer) {
+    switch(layer) {
+        case _BASE:   rgb_matrix_set_color_all(0x00, 0x00, 0xFF);    break;    // blue
+        case _LOWER:  rgb_matrix_set_color_all(0x00, 0xFF, 0x00);    break;    // green
+        case _RAISE:  rgb_matrix_set_color_all(0xFF, 0xFF, 0x00);    break;    // yellow
+        case _ADJUST: rgb_matrix_set_color_all(0x00, 0xFF, 0xFF);    break;    // cyan
+        default:
+            if (rgb_matrix_get_flags() == LED_FLAG_NONE)
+                rgb_matrix_set_color_all(0, 0, 0);
+            else
+                rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
+    }
+}
+void rgb_matrix_indicators_kb(void) {
+    // kb() implementations responsible for calling user()
+    uint8_t j = get_highest_layer(layer_state);
+    if (j != previous_layer) {
+        previous_layer = j;
+        #ifdef CONSOLE_ENABLE
+        uprintf("Layer: %d\n", j);
+        #endif
+        set_layer_color(j);
+    }
+}
+// void rgb_matrix_indicators_user(void) {
+// }
+#endif // RGB_MATRIX_ENABLE
+
+// struct _last_event_t {
+//     uint8_t  row, col, pressed;
+//     uint16_t keycode;
+// } _last_event;
+*/
+
 // EOF
