@@ -36,18 +36,17 @@ SPLIT_TRANSPORT_MIRROR = yes
 # RGB_MATRIX_KEYREACTIVE_ENABLED = yes
 
 TAPPING_TERM = 250
-
 DEFAULT_FOLDER = crkbd/rev1
 EXTRAFLAGS += -flto
 
-# NO_DEBUG = yes
-
 OLED_ENABLE = no
+
+#--- 100 bytes free / 5942 bytes free when commmented out
 CONSOLE_ENABLE = yes
 EXTRAKEY_ENABLE = no
-#MOUSEKEY_ENABLE = no
-#NKRO_ENABLE = no
-#DYNAMIC_MACRO_ENABLE = no
-#TAP_DANCE_ENABLE = no
-## COMBO_ENABLE = yes
+NKRO_ENABLE = no
+COMMAND_ENABLE = yes
+MOUSEKEY_ENABLE = no
+#---
+
 

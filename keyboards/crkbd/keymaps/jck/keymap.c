@@ -121,11 +121,8 @@ enum _layers {
   _LAST
 };
 
-const char _layer_names_str[7][2] = {
-    "B", "L", "R", "A", "M", "r", "?"
- };
 const char _layer_names_char[7]= {
-    'B', 'L', 'R', 'A', 'M', 'r', '?'
+    'B', 'L', 'R', 'A', 'M', '?'
  };
 
 #define _PIPE      S(KC_PIPE)
@@ -181,43 +178,47 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
 };
 
-/*
-#define KEYBOARD_SYNC_A
-#define KEYBOARD_SYNC_B
-#define SPLIT_TRANSACTION_IDS_KB KEYBOARD_SYNC_A, KEYBOARD_SYNC_B
 
-keyrecord_t record {
-  keyevent_t event {
-    keypos_t key {
-      uint8_t col
-      uint8_t row
-    }
-    bool     pressed
-    uint16_t time
-  }
-}
-*/
+////////////////////////////////////////////////////////
+//
+//  RGB LOGIC   (keyboard dependent)
+//
+
+// #ifdef RGB_MATRIX_ENABLE
+// void rgb_matrix_set_color(int index, uint8_t red, uint8_t green, uint8_t blue);
+// void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
+
+// void set_layer_color(uint8_t layer) {
+//     switch(layer) {
+//         case _BASE:   rgb_matrix_set_color_all(0x00, 0x00, 0xFF);    break;    // blue
+//         case _LOWER:  rgb_matrix_set_color_all(0x00, 0xFF, 0x00);    break;    // green
+//         case _RAISE:  rgb_matrix_set_color_all(0xFF, 0xFF, 0x00);    break;    // yellow
+//         case _ADJUST: rgb_matrix_set_color_all(0x00, 0xFF, 0xFF);    break;    // cyan
+//         // default:
+//         //     if (rgb_matrix_get_flags() == LED_FLAG_NONE)
+//         //         rgb_matrix_set_color_all(0, 0, 0);
+//         //     else
+//             rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
+//     }
+//     return;
+// }
+// #endif
 
 //static bool keyboard_is_active = false;
 static bool b_LSFT = false;
-
 
 ////////////////////////////////////////////////////////
 //
 //  DEBUG LOGIC
 //
 uint16_t flags = 0;
-#if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-char* get_buffer(void);
 void clear_buffer(void);
-void update_buffer( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km);
+void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km);
 
-#endif
 #ifdef OLED_ENABLE
 void oled_render_logo(void);
 void oled_render_buffer(void);
 #endif
-
 
 ///////////////////////////////////////////////////////
 //
@@ -225,41 +226,59 @@ void oled_render_buffer(void);
 //
 void keyboard_pre_init_kb(void) {
     // setPinOutput(B0) ... etc.
-    keyboard_pre_init_user();
+    flags |= 0x01;
     return;
 }
 
 void keyboard_pre_init_user(void) {
+    flags |= 0x10;
     return;
 }
 
-//  keyboard_post_init_
 //  gets called at the end of all QMK processing, before starting the next iteration.
 //  You can safely assume that QMK has dealt with the last matrix scan at the time that
 //  these functions are invoked – layer states have been updated, USB reports have been
 //  sent, LEDs have been updated, and displays have been drawn.
 
-
 extern debug_config_t debug_config;
 bool keyboard_post_init_b = false;
 
-void keyboard_post_init_user(void) {
-    debug_config.enable=true;
-    debug_config.mouse=true;
+void keyboard_post_init_kb(void) {
+    flags |= 0x02;
+    keyboard_post_init_b = true;
+    debug_config.enable = true;
+    debug_config.matrix = false;
+    debug_config.mouse = false;
+    debug_config.keyboard = false;
     #if defined(OLED_ENABLE)
     clear_buffer();
     oled_render_logo();
     #endif
     #ifdef RGB_ENABLE
-    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); // ****
-    rgb_matrix_sethsv_noeeprom(HSV_OFF);
-    flags = flags | 0x01;
-      // Call the post init code.
-    rgblight_enable_noeeprom(); // enables Rgb, without saving settings
-    rgblight_sethsv_noeeprom(180, 255, 255); // sets the color to teal/cyan without saving
-    rgblight_mode_noeeprom(RGBLIGHT_MODE_BREATHING + 3); // sets mode to Fast breathing without saving
+    ////rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); //
+    ////rgb_matrix_sethsv_noeeprom(HSV_OFF);
     #endif
 }
+
+void keyboard_post_init_user(void) {
+    flags |= 0x20;
+}
+
+void housekeeping_task_kb(void) {
+    flags |= 0x04;
+}
+
+void housekeeping_task_user(void) {
+    flags |= 0x40;
+}
+
+/*
+__attribute__((weak)) void matrix_init_kb(void) { matrix_init_user(); }
+__attribute__((weak)) void matrix_scan_kb(void) { matrix_scan_user(); }
+__attribute__((weak)) void matrix_init_user(void) {}
+__attribute__((weak)) void matrix_scan_user(void) {}
+*/
+
 
 // void suspend_power_down_user(void) {
 //     // code will run multiple times while keyboard is suspended
@@ -268,29 +287,6 @@ void keyboard_post_init_user(void) {
 // void suspend_wakeup_init_user(void) {
 //     // code will run on keyboard wakeup
 // }
-
-// void housekeeping_task_kb(void) {
-// }
-
-void keyboard_post_init_kb(void) {
-    flags = flags | 0x02;
-    keyboard_post_init_user();
-}
-
-void housekeeping_task_user(void) {
-    if (keyboard_post_init_b == false) {
-        keyboard_post_init_user();
-        flags = flags | 0x04;
-        #ifdef CONSOLE_ENABLE
-        dprintf("HKT: %x\n", flags);
-        #endif
-        keyboard_post_init_b = true;
-        debug_config.enable = true;
-        debug_config.matrix = false;
-        debug_config.mouse = false;
-        debug_config.keyboard = false;
-    }
-}
 
 #ifdef OLED_ENABLE
 oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
@@ -310,6 +306,47 @@ bool oled_task_kb(void) {
 }
 #endif // OLED_ENABLE
 
+
+
+extern layer_state_t layer_state;   // quantum/action_layer.c
+
+layer_state_t get_layer_state(void) { return layer_state; }
+
+uint8_t get_top_layer_bit(void) {
+    return get_highest_layer( get_layer_state()); }
+
+uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
+    uint8_t r = 0;              // r will be log-base-2(v)
+    while (value>>=1) r++;
+    return r;
+}
+
+void layer_state_msg(layer_state_t state, char tag) {
+    //uint8_t i = logb2(get_top_layer_bit());
+    //char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
+    //dprintf("_: %d %c\n", i, p);
+    uprintf("_ %x, %x %x\n", layer_state, get_highest_layer(layer_state), logb2(layer_state));
+}
+
+layer_state_t layer_state_set_kb(layer_state_t state) {
+    // QMK documentation indicates rgblight_setrgb( red, green, blue) can be called here
+    layer_state_msg(state, '>');
+    #ifdef RGB_MATRIX_ENABLE
+    //set_layer_color((uint8_t)(state));
+    #endif
+    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+};
+
+layer_state_t layer_state_set_user(layer_state_t state) {
+    layer_state_msg(state, '#');
+    return state;
+};
+
+/*
+    ../quantum//action_layer.h:# define get_highest_layer(state) biton(state)
+    ../quantum//action_layer.h:# define get_highest_layer(state) biton16(state)
+    ../quantum//action_layer.h:# define get_highest_layer(state) biton32(state)
+*/
 
 ////////////////////////////////////////////////////////
 //
@@ -341,33 +378,11 @@ void send_kcode(uint16_t kc, uint16_t mods) {       // should we just OR the mod
         clear_mods();
 }
 
-layer_state_t layer_state_set_user(layer_state_t state) {
-    // QMK documentation indicates rgblight_setrgb( red, green, blue) can be called here
-    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
-};
-
-extern layer_state_t layer_state;   // quantum/action_layer.c
-
-layer_state_t get_layer_state(void) { return layer_state; }
-
-uint8_t get_top_layer_bit(void) {
-    return get_highest_layer( get_layer_state()); }
-
-uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
-    uint8_t r = 0;              // r will be log-base-2(v)
-    while (value>>=1) r++;
-    return r;
-}
-
-/*
-    ../quantum//action_layer.h:# define get_highest_layer(state) biton(state)
-    ../quantum//action_layer.h:# define get_highest_layer(state) biton16(state)
-    ../quantum//action_layer.h:# define get_highest_layer(state) biton32(state)
-*/
 
 ////////////////////////////////////////////////////////
 //
 // Keyboard State Machine
+//
 
 typedef struct {
     bool active;        // true if state-machine is active
@@ -385,7 +400,7 @@ void reset_SQ(void) {
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
-        update_buffer('v', keycode, record, SQ.kc, SQ.km);
+        dmessage('v', keycode, record, SQ.kc, SQ.km);
         if (keycode > QK_BASIC_MAX)                         // no additional processing for quatum keycode
             return true;
         if (SQ.active && short_delay(SQ.timer32)) {         // process double-taps
@@ -414,21 +429,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (keycode == KC_LEFT_SHIFT)  SQ.km |= MOD_BIT(KC_LEFT_SHIFT);
             if (keycode == KC_LEFT_ALT)    SQ.km |= MOD_BIT(KC_LEFT_ALT);
             if (keycode == KC_LEFT_GUI)    SQ.km |= MOD_BIT(KC_LEFT_GUI);
-            // if (keycode & QK_RMODS_MIN) {
-            //     if (keycode & QK_RCTL) SQ.km |= MOD_BIT(KC_RIGHT_CTRL);
-            //     if (keycode & QK_RSFT) SQ.km |= MOD_BIT(KC_RIGHT_SHIFT);
-            //     if (keycode & QK_RALT) SQ.km |= MOD_BIT(KC_RIGHT_ALT);
-            //     if (keycode & QK_RGUI) SQ.km |= MOD_BIT(KC_RIGHT_GUI);
-            // } else {
-            //     if (keycode & QK_LCTL) SQ.km |= MOD_BIT(KC_LEFT_CTRL);
-            //     if (keycode & QK_LSFT) SQ.km |= MOD_BIT(KC_LEFT_SHIFT);
-            //     if (keycode & QK_LALT) SQ.km |= MOD_BIT(KC_LEFT_ALT);
-            //     if (keycode & QK_LGUI) SQ.km |= MOD_BIT(KC_LEFT_GUI);
-            // }                                               // QMK keycodes starting with 0xE0: KC_LEFT_CTRL, KC_LEFT_SHIFT, KC_LEFT_ALT, KC_LEFT_GUI, KC_RIGHT_CTRL, KC_RIGHT_SHIFT, KC_RIGHT_ALT, KC_RIGHT_GUI
             SQ.timer32 = timer_read32();
             SQ.active = true;
             SQ.kc = keycode;
-            update_buffer('m', keycode, record, SQ.kc, SQ.km);
+            dmessage('m', keycode, record, SQ.kc, SQ.km);
             return false;
         }
         if (IS_MOD(keycode)) {              // process other modifers
@@ -436,14 +440,14 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             SQ.kc = keycode;
             SQ.km = MOD_BIT(keycode);
             SQ.timer32 = timer_read32();
-            update_buffer('?', keycode, record, SQ.kc, SQ.km);
+            dmessage('?', keycode, record, SQ.kc, SQ.km);
             return false;
         }
         if (b_LSFT == true) {               // process caps-lock
             SQ.km = SQ.km | MOD_BIT(KC_LSFT);
-            update_buffer('c', keycode, record, SQ.kc, SQ.km);
+            dmessage('c', keycode, record, SQ.kc, SQ.km);
         }
-        update_buffer('A', keycode, record, SQ.kc, SQ.km);
+        dmessage('A', keycode, record, SQ.kc, SQ.km);
         send_kcode(keycode, SQ.km);         // tap sequence ends (key other than modifier was tapped)
         reset_SQ();                         // reset state machine
         return false;
@@ -454,7 +458,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (b_LSFT == true)
                 dprintf("caps-lock off\n");
             b_LSFT = false;
-            update_buffer('e', keycode, record, SQ.kc, SQ.km);
+            dprint(".\n");
         }
         if (keycode == KC_RSFT && SQ.active && SQ.kc == KC_RSFT && long_delay(SQ.timer32)) {
             send_kcode(KC_ENTER, SQ.km);    // releasing KC_RSFT long tap becomes KC_ENTER
@@ -505,21 +509,23 @@ void clear_buffer(void) {
   }
 }
 
-void update_buffer( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km) {
+void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km) {
     #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
     uint8_t i = logb2(get_top_layer_bit());
     char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
     char c = (char)(keycode2char( keycode));
     snprintf( get_buffer(), bufferSize,
-        "%c: %d %c %1d:%02d K%04x : %c %04x %04x",
-        tag, i, p, record->event.key.row, record->event.key.col, keycode, c, kc, km) ;
+        "%c: %d %c %1d:%02d K%04x : %c %04x %04x %02x ",
+        tag, i, p, record->event.key.row, record->event.key.col, keycode, c, kc, km, flags) ;
     if (flags != 0) {
-        dprintf("flags: %02X\n", flags);
         flags = 0;
     }
     dprintf("%s\n", get_buffer());
     #endif
 }
+#else
+void clear_buffer(void) { return; }
+void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km) { return; }
 #endif
 
 ////////////////////////////////////////////////////////
@@ -536,7 +542,7 @@ void oled_write_ln_P(const char *data, bool invert);    // writes a PSTR line
 
 void oled_render_buffer(void) {
     // called from oled_task_user or oled_task_kb
-    oled_write_char( '>', true);
+    oled_write_char( '@', true);
     oled_write_ln(get_buffer(),false);
 }
 
@@ -550,6 +556,7 @@ void oled_render_logo(void) {
     oled_clear();
     oled_write_P(logo, false);
 }
+
 
 // void render_bootmagic_status(bool status) {
 //     /* Show Ctrl-Gui Swap options */
@@ -915,6 +922,22 @@ void rgb_matrix_indicators_kb(void) {
 //     uint8_t  row, col, pressed;
 //     uint16_t keycode;
 // } _last_event;
+*/
+/*
+#define KEYBOARD_SYNC_A
+#define KEYBOARD_SYNC_B
+#define SPLIT_TRANSACTION_IDS_KB KEYBOARD_SYNC_A, KEYBOARD_SYNC_B
+
+keyrecord_t record {
+  keyevent_t event {
+    keypos_t key {
+      uint8_t col
+      uint8_t row
+    }
+    bool     pressed
+    uint16_t time
+  }
+}
 */
 
 // EOF
