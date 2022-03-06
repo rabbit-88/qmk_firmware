@@ -108,8 +108,6 @@ qk_tap_dance_action_t tap_dance_actions[] = {
 enum custom_keycodes {
     DUMMY = SAFE_RANGE,
     KC_T_SLASH,         // if true, KC_SLASH; if false, KC_UP
-    RGB_RSET,
-    KC_CAPSLCK,
 };
 
 enum _layers {
@@ -178,40 +176,31 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
 };
 
+/*
+typedef union {
+    uint32_t raw;
+    struct {
+        bool     rgb_layer_change        : 1;
+        bool     rgb_matrix_idle_anim    : 1;
+        uint8_t  rgb_matrix_active_mode  : 4;
+        uint8_t  rgb_matrix_idle_mode    : 4;
+        uint8_t  rgb_matrix_active_speed : 8;
+        uint8_t  rgb_matrix_idle_speed   : 8;
+        uint16_t rgb_matrix_idle_timeout : 16;
+    };
+} user_config_t;
 
-////////////////////////////////////////////////////////
+user_config_t user_config;  // rpbaptist
+*/
+
+///////////////////////////////////////////////////////
 //
-//  RGB LOGIC   (keyboard dependent)
+//  QMK callbacks
 //
 
-// #ifdef RGB_MATRIX_ENABLE
-// void rgb_matrix_set_color(int index, uint8_t red, uint8_t green, uint8_t blue);
-// void rgb_matrix_set_color_all(uint8_t red, uint8_t green, uint8_t blue);
-
-// void set_layer_color(uint8_t layer) {
-//     switch(layer) {
-//         case _BASE:   rgb_matrix_set_color_all(0x00, 0x00, 0xFF);    break;    // blue
-//         case _LOWER:  rgb_matrix_set_color_all(0x00, 0xFF, 0x00);    break;    // green
-//         case _RAISE:  rgb_matrix_set_color_all(0xFF, 0xFF, 0x00);    break;    // yellow
-//         case _ADJUST: rgb_matrix_set_color_all(0x00, 0xFF, 0xFF);    break;    // cyan
-//         // default:
-//         //     if (rgb_matrix_get_flags() == LED_FLAG_NONE)
-//         //         rgb_matrix_set_color_all(0, 0, 0);
-//         //     else
-//             rgb_matrix_set_color_all(0xFF, 0xFF, 0xFF);
-//     }
-//     return;
-// }
-// #endif
-
-//static bool keyboard_is_active = false;
-static bool b_LSFT = false;
-
-////////////////////////////////////////////////////////
-//
-//  DEBUG LOGIC
-//
+bool oled_kba = false;
 uint16_t flags = 0;
+
 void clear_buffer(void);
 void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km);
 
@@ -220,10 +209,11 @@ void oled_render_logo(void);
 void oled_render_buffer(void);
 #endif
 
-///////////////////////////////////////////////////////
-//
-//  QMK callbacks
-//
+#ifdef RGB_MATRIX_ENABLE
+extern rgb_config_t rgb_matrix_config;
+extern led_config_t g_led_config;
+
+#endif
 void keyboard_pre_init_kb(void) {
     // setPinOutput(B0) ... etc.
     flags |= 0x01;
@@ -257,6 +247,7 @@ void keyboard_post_init_kb(void) {
     #ifdef RGB_ENABLE
     ////rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); //
     ////rgb_matrix_sethsv_noeeprom(HSV_OFF);
+    rgb_matrix_config.enable = 1;
     #endif
 }
 
@@ -277,18 +268,12 @@ __attribute__((weak)) void matrix_init_kb(void) { matrix_init_user(); }
 __attribute__((weak)) void matrix_scan_kb(void) { matrix_scan_user(); }
 __attribute__((weak)) void matrix_init_user(void) {}
 __attribute__((weak)) void matrix_scan_user(void) {}
+__attribute__((weak)) void suspend_power_down_user(void) {}
+__attribute__((weak)) void suspend_power_down_kb(void) { suspend_power_down_user(); }
 */
 
-
-// void suspend_power_down_user(void) {
-//     // code will run multiple times while keyboard is suspended
-// }
-
-// void suspend_wakeup_init_user(void) {
-//     // code will run on keyboard wakeup
-// }
-
 #ifdef OLED_ENABLE
+
 oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     if (!is_keyboard_master()) {
         return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
@@ -296,7 +281,7 @@ oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     return rotation;
 }
 bool oled_task_kb(void) {
-    if (keyboard_is_active) {
+    if (oled_kba) {
         oled_clear();
         oled_render_buffer();
     } else {
@@ -307,13 +292,17 @@ bool oled_task_kb(void) {
 #endif // OLED_ENABLE
 
 
+////////////////////////////////////////////////////////
+//
+//  Managing changes to active keyboard layer
+//
+
+void rgb_helper(uint8_t r, uint8_t g, uint8_t b);
+void rgb_set_layer_color(uint8_t layer);
+
+static bool b_LSFT = false;
 
 extern layer_state_t layer_state;   // quantum/action_layer.c
-
-layer_state_t get_layer_state(void) { return layer_state; }
-
-uint8_t get_top_layer_bit(void) {
-    return get_highest_layer( get_layer_state()); }
 
 uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
     uint8_t r = 0;              // r will be log-base-2(v)
@@ -321,36 +310,32 @@ uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
     return r;
 }
 
-void layer_state_msg(layer_state_t state, char tag) {
-    //uint8_t i = logb2(get_top_layer_bit());
-    //char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
-    //dprintf("_: %d %c\n", i, p);
-    uprintf("_ %x, %x %x\n", layer_state, get_highest_layer(layer_state), logb2(layer_state));
-}
+// void layer_state_msg(char tag) {
+//     //uint8_t i = logb2(get_top_layer_bit());
+//     //char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
+//     //dprintf("_: %d %c\n", i, p);
+//     uprintf("%c %0X, %0X %0X\n", tag, layer_state, get_highest_layer(layer_state), logb2(layer_state));
+// }
+
+static bool r_update_rgb = false;
+static uint8_t last_layer = 0;
 
 layer_state_t layer_state_set_kb(layer_state_t state) {
-    // QMK documentation indicates rgblight_setrgb( red, green, blue) can be called here
-    layer_state_msg(state, '>');
-    #ifdef RGB_MATRIX_ENABLE
-    //set_layer_color((uint8_t)(state));
-    #endif
-    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+    uint8_t layer = update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+    if (layer != last_layer) {
+        last_layer = layer;
+        r_update_rgb = true;
+    }
+    return layer;
 };
 
-layer_state_t layer_state_set_user(layer_state_t state) {
-    layer_state_msg(state, '#');
-    return state;
-};
-
-/*
-    ../quantum//action_layer.h:# define get_highest_layer(state) biton(state)
-    ../quantum//action_layer.h:# define get_highest_layer(state) biton16(state)
-    ../quantum//action_layer.h:# define get_highest_layer(state) biton32(state)
-*/
-
-////////////////////////////////////////////////////////
-//
-//  PROCESS RECORD
+void rgb_matrix_indicators_kb(void) {
+    // if (r_update_rgb) {
+    //     rgb_set_layer_color(logb2(layer_state));
+    //     r_update_rgb = false;
+    // }
+    rgb_set_layer_color(logb2(layer_state));
+}
 
 uint16_t deltaTau16(uint16_t t0, uint16_t t1) {
     return (t1 > t0) ? t1 - t0 : t0 - t1;
@@ -378,7 +363,6 @@ void send_kcode(uint16_t kc, uint16_t mods) {       // should we just OR the mod
         clear_mods();
 }
 
-
 ////////////////////////////////////////////////////////
 //
 // Keyboard State Machine
@@ -391,26 +375,28 @@ typedef struct {
     uint32_t timer32;   // milliseconds
 } _last_key_pressed;
 
-static _last_key_pressed SQ =  { .active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
+static _last_key_pressed PRU =  { .active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
 
-void reset_SQ(void) {
-    SQ.active = false;
-    SQ.kc = SQ.km = 0;
+void reset_PRU(void) {
+    PRU.active = false;
+    PRU.kc = PRU.km = 0;
 }
+
+// bool process_record_kb(uint16_t keycode, keyrecord_t *record);
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
-        dmessage('v', keycode, record, SQ.kc, SQ.km);
+        dmessage('v', keycode, record, PRU.kc, PRU.km);
         if (keycode > QK_BASIC_MAX)                         // no additional processing for quatum keycode
             return true;
-        if (SQ.active && short_delay(SQ.timer32)) {         // process double-taps
-            if (keycode == KC_RSFT && SQ.kc == KC_RSFT) {
+        if (PRU.active && short_delay(PRU.timer32)) {         // process double-taps
+            if (keycode == KC_RSFT && PRU.kc == KC_RSFT) {
                 keycode = KC_ENTER;                         // KC_RSFT double-tap becomes KC_ENTER
-                reset_SQ();
+                reset_PRU();
             }
-            if (keycode == KC_LSFT && SQ.kc == KC_LSFT) {
+            if (keycode == KC_LSFT && PRU.kc == KC_LSFT) {
                 b_LSFT = true;                              // KC_LSFT double-tap becomes CAPS-LOCK
-                reset_SQ();
+                reset_PRU();
                 dprintf("caps-lock 2\n");
             }
         }
@@ -421,51 +407,51 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (keycode == RGB_SPI) keycode = RGB_SPD;
         }
         if (keycode >= KC_LEFT_CTRL && keycode <= KC_RIGHT_GUI) {   // process standard modifers
-            if (keycode == KC_RIGHT_CTRL)  SQ.km |= MOD_BIT(KC_RIGHT_CTRL);
-            if (keycode == KC_RIGHT_SHIFT) SQ.km |= MOD_BIT(KC_RIGHT_SHIFT);
-            if (keycode == KC_RIGHT_ALT)   SQ.km |= MOD_BIT(KC_RIGHT_ALT);
-            if (keycode == KC_RIGHT_GUI)   SQ.km |= MOD_BIT(KC_RIGHT_GUI);
-            if (keycode == KC_LEFT_CTRL)   SQ.km |= MOD_BIT(KC_LEFT_CTRL);
-            if (keycode == KC_LEFT_SHIFT)  SQ.km |= MOD_BIT(KC_LEFT_SHIFT);
-            if (keycode == KC_LEFT_ALT)    SQ.km |= MOD_BIT(KC_LEFT_ALT);
-            if (keycode == KC_LEFT_GUI)    SQ.km |= MOD_BIT(KC_LEFT_GUI);
-            SQ.timer32 = timer_read32();
-            SQ.active = true;
-            SQ.kc = keycode;
-            dmessage('m', keycode, record, SQ.kc, SQ.km);
+            if (keycode == KC_RIGHT_CTRL)  PRU.km |= MOD_BIT(KC_RIGHT_CTRL);
+            if (keycode == KC_RIGHT_SHIFT) PRU.km |= MOD_BIT(KC_RIGHT_SHIFT);
+            if (keycode == KC_RIGHT_ALT)   PRU.km |= MOD_BIT(KC_RIGHT_ALT);
+            if (keycode == KC_RIGHT_GUI)   PRU.km |= MOD_BIT(KC_RIGHT_GUI);
+            if (keycode == KC_LEFT_CTRL)   PRU.km |= MOD_BIT(KC_LEFT_CTRL);
+            if (keycode == KC_LEFT_SHIFT)  PRU.km |= MOD_BIT(KC_LEFT_SHIFT);
+            if (keycode == KC_LEFT_ALT)    PRU.km |= MOD_BIT(KC_LEFT_ALT);
+            if (keycode == KC_LEFT_GUI)    PRU.km |= MOD_BIT(KC_LEFT_GUI);
+            PRU.timer32 = timer_read32();
+            PRU.active = true;
+            PRU.kc = keycode;
+            dmessage('m', keycode, record, PRU.kc, PRU.km);
             return false;
         }
         if (IS_MOD(keycode)) {              // process other modifers
-            SQ.active = true;
-            SQ.kc = keycode;
-            SQ.km = MOD_BIT(keycode);
-            SQ.timer32 = timer_read32();
-            dmessage('?', keycode, record, SQ.kc, SQ.km);
+            PRU.active = true;
+            PRU.kc = keycode;
+            PRU.km = MOD_BIT(keycode);
+            PRU.timer32 = timer_read32();
+            dmessage('?', keycode, record, PRU.kc, PRU.km);
             return false;
         }
         if (b_LSFT == true) {               // process caps-lock
-            SQ.km = SQ.km | MOD_BIT(KC_LSFT);
-            dmessage('c', keycode, record, SQ.kc, SQ.km);
+            PRU.km = PRU.km | MOD_BIT(KC_LSFT);
+            dmessage('c', keycode, record, PRU.kc, PRU.km);
         }
-        dmessage('A', keycode, record, SQ.kc, SQ.km);
-        send_kcode(keycode, SQ.km);         // tap sequence ends (key other than modifier was tapped)
-        reset_SQ();                         // reset state machine
+        dmessage('A', keycode, record, PRU.kc, PRU.km);
+        send_kcode(keycode, PRU.km);         // tap sequence ends (key other than modifier was tapped)
+        reset_PRU();                         // reset state machine
         return false;
     }
     if (!record->event.pressed) {
         if (keycode == KC_ESC) {            // releasing ESC clears state-machine
-            reset_SQ();
+            reset_PRU();
             if (b_LSFT == true)
                 dprintf("caps-lock off\n");
             b_LSFT = false;
             dprint(".\n");
         }
-        if (keycode == KC_RSFT && SQ.active && SQ.kc == KC_RSFT && long_delay(SQ.timer32)) {
-            send_kcode(KC_ENTER, SQ.km);    // releasing KC_RSFT long tap becomes KC_ENTER
-            reset_SQ();
+        if (keycode == KC_RSFT && PRU.active && PRU.kc == KC_RSFT && long_delay(PRU.timer32)) {
+            send_kcode(KC_ENTER, PRU.km);    // releasing KC_RSFT long tap becomes KC_ENTER
+            reset_PRU();
             return false;
         }
-        if (keycode == KC_LSFT && SQ.active && SQ.kc == KC_LSFT && long_delay(SQ.timer32)) {
+        if (keycode == KC_LSFT && PRU.active && PRU.kc == KC_LSFT && long_delay(PRU.timer32)) {
             b_LSFT = true;                  // releasing KC_LSFT long tap becomes CAPS-LOCK
             dprintf("caps-lock 1\n");
             return false;
@@ -477,7 +463,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
 ////////////////////////////////////////////////////////
 //
-//  DEBUG LOGIC
+//  DEBUG HELPERS
 
 #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
 
@@ -511,7 +497,7 @@ void clear_buffer(void) {
 
 void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km) {
     #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
-    uint8_t i = logb2(get_top_layer_bit());
+    uint8_t i = logb2(layer_state);
     char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
     char c = (char)(keycode2char( keycode));
     snprintf( get_buffer(), bufferSize,
@@ -557,7 +543,6 @@ void oled_render_logo(void) {
     oled_write_P(logo, false);
 }
 
-
 // void render_bootmagic_status(bool status) {
 //     /* Show Ctrl-Gui Swap options */
 //     static const char PROGMEM logo[][2][3] = {
@@ -575,30 +560,65 @@ void oled_render_logo(void) {
 
 #endif // OLED_ENABLE
 
-
-/*
-#ifdef RGB_MATRIX_ENABLE
 ////////////////////////////////////////////////////////
 //
-//  RGB LOGIC   (keyboard dependent)
+//  RGB LOGIC (keyboard dependent)
 //
 
-// uint8_t rgb_matrix_map_row_column_to_led(uint8_t row, uint8_t column, uint8_t *led_i);
-// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
-// extern bool g_suspend_state;
-// extern rgb_config_t rgb_matrix_config;
+/*
+ *  rgb_matrix_types.h
 
-RGB _palete[13] = { { RGB_OFF },  { RGB_WHITE }, { RGB_RED }, { RGB_GREEN }, { RGB_BLUE },
-                    { RGB_CYAN }, { RGB_MAGENTA }, { RGB_YELLOW },
-                    { RGB_TEAL }, { RGB_ORANGE }, { RGB_GOLDENROD }, { RGB_CHARTREUSE },
-                    { RGB_PURPLE }
- };
+    typedef union {
+    uint32_t raw;
+    struct PACKED {
+        uint8_t     enable : 2;
+        uint8_t     mode : 6;
+        HSV         hsv;
+        uint8_t     speed;  // EECONFIG needs to be increased to support this
+        led_flags_t flags;
+    };
+} rgb_config_t;
+*/
 
-enum _colors {
-    OFF, W, R, G, B, C, M, Y, T, O, GD, CE
-};
+#ifdef RGB_MATRIX_ENABLE
+//RGB _palete[13] = { { RGB_OFF },  { RGB_WHITE }, { RGB_RED }, { RGB_GREEN }, { RGB_BLUE }, };
+//                     { RGB_CYAN }, { RGB_MAGENTA }, { RGB_YELLOW },
+//                     { RGB_TEAL }, { RGB_ORANGE }, { RGB_GOLDENROD }, { RGB_CHARTREUSE },
+//                     { RGB_PURPLE }
+//  };
 
-uint8_t _rgb_layers[6][2][27] = {
+void rgb_helper(uint8_t r, uint8_t g, uint8_t b) {
+    for (uint8_t i = 0; i < DRIVER_LED_TOTAL; i++) {
+        rgb_matrix_set_color(i, r, g, b);
+    }
+}
+void rgb_set_layer_color(uint8_t layer) {
+    switch (layer) {
+        case _BASE:
+            rgb_helper( 0x00, 0x00, 0xF0);
+            break;
+        case _LOWER:
+            rgb_helper( RGB_RED);
+            break;
+        case _RAISE:
+            rgb_helper( RGB_GREEN);
+            break;
+        case _ADJUST:
+            rgb_helper( RGB_YELLOW);
+            break;
+        case _MOUSE:
+            rgb_helper( RGB_PURPLE);
+            break;
+        default:
+            return;
+    }
+}
+
+#endif
+
+/*
+
+uint8_t _rgb_layers[5][2][27] = {
     //    10: Space,  11: Lower, 12: Mouse                      13: ESC, 14: TAB, 15: SHFT
     //    20: Return, 21: Raise, 22: Mouse                      23: DEL, 24: Quote, 25: Return
     //    10 B  G  T  R  F  V  11 12 C  D  E  W  S  X  Z  A  Q  13 14 15 _  _  _  _  _  _
@@ -624,8 +644,19 @@ uint8_t _rgb_layers[6][2][27] = {
         { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5 }
     },
 };
+#endif
+*/
+/*
 
-#endif // RGB_MATRIX_ENABLE
+// uint8_t rgb_matrix_map_row_column_to_led(uint8_t row, uint8_t column, uint8_t *led_i);
+// extern bool rgb_matrix_get_suspend_state(void); // { return g_suspend_state; }
+// extern bool g_suspend_state;
+// extern rgb_config_t rgb_matrix_config;
+
+enum _colors {
+    OFF, W, R, G, B, C, M, Y, T, O, GD, CE
+};
+
 */
 
 /////////////////////////////////////////////////////////

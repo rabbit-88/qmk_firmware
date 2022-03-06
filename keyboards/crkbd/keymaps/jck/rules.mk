@@ -39,14 +39,19 @@ TAPPING_TERM = 250
 DEFAULT_FOLDER = crkbd/rev1
 EXTRAFLAGS += -flto
 
+#--- 5600 bytes
 OLED_ENABLE = no
+#---
 
-#--- 100 bytes free / 5942 bytes free when commmented out
-CONSOLE_ENABLE = yes
-EXTRAKEY_ENABLE = no
-NKRO_ENABLE = no
+#--- 5842 bytes / 100 bytes free
 COMMAND_ENABLE = yes
+CONSOLE_ENABLE = yes
+OLED_ENABLE = no
+NKRO_ENABLE = no
+EXTRAKEY_ENABLE = no
 MOUSEKEY_ENABLE = no
 #---
 
-
+#--- 1426 bytes free
+TAP_DANCE_ENABLE = no
+#---
