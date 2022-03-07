@@ -162,7 +162,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
      RESET,   KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,                        KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10, RESET,
      M_RSTOP, KC_F11,  KC_F12,  KC_F13,  KC_F14,  KC_F15,                       KC_F16,  KC_F17,  KC_F18,  KC_F19,  KC_F11, XXXXXXX,   // KC_F20 not available on macOS
-     XXXXXXX, KC_ASRP, KC_ASON, KC_ASOFF,KC_ASUP, KC_ASDN,                      LSFT(XXXXXXX), XXXXXXX, XXXXXXX, XXXXXXX, KC_F12, _______,
+     XXXXXXX, KC_ASRP, KC_ASON, KC_ASOFF,KC_ASUP, KC_ASDN,                      XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_F12, _______,
   //|--------+--------+--------+--------+--------+--------+--------|  |--------+--------+--------+--------+--------+--------+--------|
                                          _______, _______, _______,    _______, _______, _______
   ),
@@ -176,6 +176,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
 };
 
+// ToDo: QK_CLEAR_EEPROM should be assigned to a weird tap dance
 /*
 typedef union {
     uint32_t raw;
@@ -245,14 +246,16 @@ void keyboard_post_init_kb(void) {
     oled_render_logo();
     #endif
     #ifdef RGB_ENABLE
-    ////rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); //
-    ////rgb_matrix_sethsv_noeeprom(HSV_OFF);
+    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); //
+    //rgb_matrix_sethsv_noeeprom(HSV_OFF);
     rgb_matrix_config.enable = 1;
     #endif
 }
 
 void keyboard_post_init_user(void) {
     flags |= 0x20;
+    // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
+    // # rgb_matrix_sethsv_noeeprom(HSV_OFF);
 }
 
 void housekeeping_task_kb(void) {
@@ -317,16 +320,17 @@ uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
 //     uprintf("%c %0X, %0X %0X\n", tag, layer_state, get_highest_layer(layer_state), logb2(layer_state));
 // }
 
-static bool r_update_rgb = false;
-static uint8_t last_layer = 0;
+//static bool r_update_rgb = false;
+//static uint8_t last_layer = 0;
 
-layer_state_t layer_state_set_kb(layer_state_t state) {
-    uint8_t layer = update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
-    if (layer != last_layer) {
-        last_layer = layer;
-        r_update_rgb = true;
-    }
-    return layer;
+layer_state_t layer_state_set_user(layer_state_t state) {
+    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+    // uint8_t layer = update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+    // if (layer != last_layer) {
+    //     last_layer = layer;
+    //     r_update_rgb = true;
+    // }
+    // return layer;
 };
 
 void rgb_matrix_indicators_kb(void) {
@@ -595,25 +599,24 @@ void rgb_helper(uint8_t r, uint8_t g, uint8_t b) {
 void rgb_set_layer_color(uint8_t layer) {
     switch (layer) {
         case _BASE:
-            rgb_helper( 0x00, 0x00, 0xF0);
+            rgb_helper( 0x00, 0x00, 0x20);
             break;
         case _LOWER:
-            rgb_helper( RGB_RED);
+            rgb_helper( 0x10, 0x00, 0x00);
             break;
         case _RAISE:
-            rgb_helper( RGB_GREEN);
+            rgb_helper( 0x00, 0x10, 0x00);
             break;
         case _ADJUST:
-            rgb_helper( RGB_YELLOW);
+            rgb_helper( 0x30, 0x10, 0x00);  // orange
             break;
         case _MOUSE:
-            rgb_helper( RGB_PURPLE);
+            rgb_helper( 0x20, 0x00, 0x20);
             break;
         default:
             return;
     }
 }
-
 #endif
 
 /*
