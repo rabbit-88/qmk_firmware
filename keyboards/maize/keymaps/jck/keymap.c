@@ -6,9 +6,7 @@
 #include <stdio.h>
 #include "keycode.h"
 // #include "config.h"
-// #include "crkbd.h"
 #include "color.h"
-//#include "rev1.h"
 // #include "rgb_matrix.h"
 // #include "rgb_matrix/rgb_matrix.h"
 
@@ -108,6 +106,7 @@ qk_tap_dance_action_t tap_dance_actions[] = {
 enum custom_keycodes {
     DUMMY = SAFE_RANGE,
     KC_T_SLASH,         // if true, KC_SLASH; if false, KC_UP
+    KC_T_AR,
 };
 
 enum _layers {
@@ -118,10 +117,6 @@ enum _layers {
   _MOUSE,
   _LAST
 };
-
-const char _layer_names_char[7]= {
-    'B', 'L', 'R', 'A', 'M', '?'
- };
 
 #define _PIPE      S(KC_PIPE)
 #define KC_LDAQ    LALT(KC_BSLASH)
@@ -162,7 +157,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
      RESET,   KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,                        KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10, RESET,
      M_RSTOP, KC_F11,  KC_F12,  KC_F13,  KC_F14,  KC_F15,                       KC_F16,  KC_F17,  KC_F18,  KC_F19,  KC_F11, XXXXXXX,   // KC_F20 not available on macOS
-     XXXXXXX, KC_ASRP, KC_ASON, KC_ASOFF,KC_ASUP, KC_ASDN,                      XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_F12, _______,
+     KC_T_AR, KC_ASRP, KC_ASON, KC_ASOFF,KC_ASUP, KC_ASDN,                      XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_F12, _______,
   //|--------+--------+--------+--------+--------+--------+--------|  |--------+--------+--------+--------+--------+--------+--------|
                                          _______, _______, _______,    _______, _______, _______
   ),
@@ -199,8 +194,8 @@ user_config_t user_config;  // rpbaptist
 //  QMK callbacks
 //
 
-bool oled_kba = false;
-uint16_t flags = 0;
+bool oled_active = false;
+uint16_t d_flags = 0;
 
 void clear_buffer(void);
 void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km);
@@ -217,12 +212,12 @@ extern led_config_t g_led_config;
 #endif
 void keyboard_pre_init_kb(void) {
     // setPinOutput(B0) ... etc.
-    flags |= 0x01;
+    d_flags |= 0x01;
     return;
 }
 
 void keyboard_pre_init_user(void) {
-    flags |= 0x10;
+    d_flags |= 0x10;
     return;
 }
 
@@ -245,7 +240,7 @@ extern debug_config_t debug_config;
 bool keyboard_post_init_b = false;
 
 void keyboard_post_init_kb(void) {
-    flags |= 0x02;
+    d_flags |= 0x02;
     keyboard_post_init_b = true;
     debug_config.enable = true;
     debug_config.matrix = false;
@@ -260,20 +255,23 @@ void keyboard_post_init_kb(void) {
     //rgb_matrix_sethsv_noeeprom(HSV_OFF);
     rgb_matrix_config.enable = 1;
     #endif
+    //#ifdef CONSOLE_ENABLE
+    //dprintf("SSP='SOFT_SERIAL_PIN'\n");
+    //#endif
 }
 
 void keyboard_post_init_user(void) {
-    flags |= 0x20;
+    d_flags |= 0x20;
     // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
     // # rgb_matrix_sethsv_noeeprom(HSV_OFF);
 }
 
 void housekeeping_task_kb(void) {
-    flags |= 0x04;
+    d_flags |= 0x04;
 }
 
 void housekeeping_task_user(void) {
-    flags |= 0x40;
+    d_flags |= 0x40;
 }
 
 /*
@@ -317,6 +315,12 @@ static bool b_LSFT = false;
 
 extern layer_state_t layer_state;   // quantum/action_layer.c
 
+#if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+const char _layer_names_char[7]= {
+    'B', 'L', 'R', 'A', 'M', '?'
+ };
+ #endif
+
 uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
     uint8_t r = 0;              // r will be log-base-2(v)
     while (value>>=1) r++;
@@ -329,9 +333,6 @@ uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
 //     //dprintf("_: %d %c\n", i, p);
 //     uprintf("%c %0X, %0X %0X\n", tag, layer_state, get_highest_layer(layer_state), logb2(layer_state));
 // }
-
-//static bool r_update_rgb = false;
-//static uint8_t last_layer = 0;
 
 layer_state_t layer_state_set_user(layer_state_t state) {
     return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
@@ -367,9 +368,6 @@ bool long_delay(uint32_t timer32) {
     return (timer_elapsed32(timer32) > TAPPING_TERM);
 }
 
-// static uint16_t last_kc, last_km;
-// static uint32_t last_timer32;   // milliseconds
-
 void send_kcode(uint16_t kc, uint16_t km) {       // should we just OR the mods into the keycode instead?
     if (km != 0)
         set_mods(km);
@@ -396,6 +394,7 @@ typedef struct {
 } _last_key_pressed;
 
 static _last_key_pressed LKP =  { .mods_active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
+static bool autorepeat = false;
 
 // bool process_record_kb(uint16_t keycode, keyrecord_t *record);
 
@@ -411,6 +410,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         }
         if (keycode > QK_BASIC_MAX)                         // no additional processing for quatum keycode
             return true;
+        if (keycode == KC_T_AR) {
+            autorepeat = autorepeat ^ 1; // = (autorepeat == true) ? false : true;
+            return false;
+        }
         if (LKP.mods_active && short_delay(LKP.timer32)) {         // process double-taps
             if (keycode == KC_RSFT && LKP.kc == KC_RSFT) {
                 keycode = KC_ENTER;                         // KC_RSFT double-tap becomes KC_ENTER
@@ -489,8 +492,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 void matrix_scan_user(void) {
-    if (LKP.kc != KC_NO && long_delay(LKP.timer32)) {
-        send_kcode(LKP.kc, LKP.km);
+    if (autorepeat) {
+        if (LKP.kc != KC_NO && long_delay(LKP.timer32)) {
+            send_kcode(LKP.kc, LKP.km);
+        }
     }
 }
 
@@ -536,9 +541,9 @@ void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uin
     char c = (char)(keycode2char( keycode));
     snprintf( get_buffer(), bufferSize,
         "%c: %d %c %1d:%02d K%04x : %c %04x %04x %02x ",
-        tag, i, p, record->event.key.row, record->event.key.col, keycode, c, kc, km, flags) ;
-    if (flags != 0) {
-        flags = 0;
+        tag, i, p, record->event.key.row, record->event.key.col, keycode, c, kc, km, d_flags) ;
+    if (d_flags != 0) {
+        d_flags = 0;
     }
     dprintf("%s\n", get_buffer());
     #endif

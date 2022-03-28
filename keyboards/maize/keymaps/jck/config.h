@@ -16,9 +16,6 @@
 #define MASTER_LEFT
 #define TAPPING_FORCE_HOLD
 #define TAPPING_TERM 250
-#define DIODE_DIRECTION COL2ROW
-#define USE_SERIAL_PD2
-#define SOFT_SERIAL_PIN D2
 
 #define SPLIT_TRANSPORT_MIRROR
 #define SPLIT_LAYER_STATE_ENABLE
@@ -33,9 +30,6 @@
 #define SPLIT_OLED_ENABLE
 // #endif // OLED_ENABLE
 
-
-#define RGB_DI_PIN      D3
-#define RGBLIGHT_SPLIT
 
 #ifdef RGB_MATRIX_ENABLE
     #define RGB_MATRIX_KEYPRESSES
@@ -56,4 +50,4 @@
 // Corne logo
 //#define OLED_FONT_H "keyboards/crkbd/lib/glcdfont.c"
 // QMK logo
-#define OLED_FONT_H "keyboards/crkbd/keymaps/jck/glcdfont.c"
+#define OLED_FONT_H "glcdfont.c"

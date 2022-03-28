@@ -120,10 +120,6 @@ enum _layers {
   _LAST
 };
 
-const char _layer_names_char[7]= {
-    'B', 'L', 'R', 'A', 'M', '?'
- };
-
 #define _PIPE      S(KC_PIPE)
 #define KC_LDAQ    LALT(KC_BSLASH)
 #define KC_RDAQ    LALT(S(KC_BSLASH))
@@ -497,13 +493,13 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
-// void matrix_scan_user(void) {
-//     if (autorepeat) {
-//         if (LKP.kc != KC_NO && long_delay(LKP.timer32)) {
-//             send_kcode(LKP.kc, LKP.km);
-//         }
-//     }
-// }
+void matrix_scan_user(void) {
+    if (autorepeat) {
+        if (LKP.kc != KC_NO && long_delay(LKP.timer32)) {
+            send_kcode(LKP.kc, LKP.km);
+        }
+    }
+}
 
 
 ////////////////////////////////////////////////////////

@@ -2,7 +2,9 @@
 *.bak
 *.swp
 *~
+*.zip
 .DS_Store
+
 
 # Build artifacts
 .clang_complete
@@ -15,6 +17,7 @@
 *.o
 *.stackdump
 *.sym
+*.tgz
 
 # QMK-specific
 api_data/v1
@@ -91,3 +94,5 @@ user_song_list.h
 compile_commands.json
 .clangd/
 .cache/
+.vscode/settings.json
+

@@ -16,7 +16,7 @@ UNICODE_ENABLE = no
 OLED_ENABLE = no			# can not enable CONSOLE and OLED at the same time
 OLED_DRIVER_ENABLE  = no
 
-SPLIT_TRANSPORT = mirror
+SPLIT_TRANSPORT = mirror	# serial
 SPLIT_TRANSPORT_MIRROR = yes
 
 RGBLIGHT_SUPPORTED = no
@@ -40,8 +40,9 @@ EXTRAFLAGS += -flto
 # GET_AUTO_REPEAT_PER_KEY = yes
 
 #--- CONSOLE or TAP_DANCE but not both
-# CONSOLE_ENABLE = yes
-# TAP_DANCE_ENABLE = no
+CONSOLE_ENABLE = yes
+TAP_DANCE_ENABLE = yes
+DYNAMIC_MACRO_ENABLE = no
 #---
 
 #---

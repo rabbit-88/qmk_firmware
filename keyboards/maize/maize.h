@@ -17,13 +17,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
 
-// #ifdef KEYBOARD_crkbd_rev1
-// #    include "rev1.h"
-// #endif
-// #ifdef KEYBOARD_crkbd_r2g
-// #    include "r2g.h"
-// #endif
-
 #include "quantum.h"
 
 #define has_usb() is_keyboard_master()
