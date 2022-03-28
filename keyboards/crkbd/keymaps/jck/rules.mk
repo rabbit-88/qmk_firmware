@@ -18,7 +18,7 @@ DYNAMIC_MACRO_ENABLE = yes
 
 LTO_ENABLE = yes
 
-OLED_ENABLE = yes			# can not enable CONSOLE and OLED at the same time
+OLED_ENABLE = no			# can not enable CONSOLE and OLED at the same time
 OLED_DRIVER = SSD1306
 OLED_DRIVER_ENABLE  = yes
 
@@ -41,7 +41,10 @@ EXTRAFLAGS += -flto
 
 #--- 5600 bytes
 OLED_ENABLE = no
+EXTRAKEY_ENABLE = yes
 #---
+# GET_AUTO_SHIFT_REPEAT = yes
+# GET_AUTO_REPEAT_PER_KEY = yes
 
 #--- CONSOLE or TAP_DANCE but not both
 # CONSOLE_ENABLE = yes
