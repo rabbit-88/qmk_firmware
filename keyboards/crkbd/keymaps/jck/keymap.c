@@ -141,9 +141,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
   [_LOWER] = LAYOUT_split_3x6_3(
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
-    KC_GRAVE,  KC_1,    KC_2,    KC_3,    KC_4,    KC_5,                         KC_6,    KC_7,   KC_8,    KC_9,    KC_0,    _______,
-      M_REC1,  KC_INS,  KC_HOME, KC_PGUP, XXXXXXX, KC_END,                       XXXXXXX, KC_4,   KC_5,    KC_6,    KC_LDAQ, TD_LBRCKT,
-     M_PLAY1,  KC_DEL,  KC_END,  KC_PGDN, XXXXXXX, XXXXXXX,                      XXXXXXX, KC_1,   KC_2,    KC_3,    KC_BSLASH, _______,
+     KC_GRAVE,KC_1,    KC_2,    KC_3,    KC_4,    KC_5,                         KC_6,    KC_7,   KC_8,    KC_9,    KC_0,    _______,
+     M_REC1,  KC_INS,  KC_HOME, KC_PGUP, XXXXXXX, KC_END,                       XXXXXXX, KC_4,   KC_5,    KC_6,    KC_LDAQ, TD_LBRCKT,
+     M_PLAY1, KC_DEL,  KC_END,  KC_PGDN, XXXXXXX, XXXXXXX,                      XXXXXXX, KC_1,   KC_2,    KC_3,    KC_BSLASH, _______,
   //|--------+--------+--------+--------+--------+--------+--------|  |--------+--------+--------+--------+--------+--------+--------|
                                           _______, _______, _______,   KC_0,    _______, _______
   ),
@@ -151,7 +151,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
      KC_TILDE,KC_EXLM, KC_AT,   KC_HASH, KC_DLR,  KC_PERC,                      KC_CIRC, KC_AMPR, KC_ASTR, KC_LPRN, KC_RPRN, KC_DEL,
      M_REC2,  XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,                      XXXXXXX, KC_UNDS, KC_PLUS, KC_EQUAL,KC_RDAQ, TD_RBRCKT,
-     M_PLAY2, KC_LCTL, KC_LALT, KC_LGUI, XXXXXXX, RGB_TOG,                      RGB_TOG, KC_RCTL, KC_RALT, KC_RCMD, _PIPE,   _______,
+     M_PLAY2, KC_LCTL, KC_LALT, KC_LGUI, XXXXXXX, RGB_TOG,                      RGB_TOG, KC_RCMD, KC_RALT, KC_RCTL, _PIPE,   _______,
   //|--------+--------+--------+--------+--------+--------+--------|  |--------+--------+--------+--------+--------+--------+--------|
                                           _______, _______, _______,   _______, _______, _______
   ),
@@ -200,7 +200,7 @@ bool oled_active = false;
 uint16_t d_flags = 0;
 
 void clear_buffer(void);
-void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km);
+void dmessage( char tag, uint16_t keycode, keyrecord_t *record);
 
 #ifdef OLED_ENABLE
 void oled_render_logo(void);
@@ -257,9 +257,7 @@ void keyboard_post_init_kb(void) {
     //rgb_matrix_sethsv_noeeprom(HSV_OFF);
     rgb_matrix_config.enable = 1;
     #endif
-    //#ifdef CONSOLE_ENABLE
-    //dprintf("SSP='SOFT_SERIAL_PIN'\n");
-    //#endif
+    printf("post-init-kb\n");
 }
 
 void keyboard_post_init_user(void) {
@@ -312,8 +310,6 @@ bool oled_task_kb(void) {
 
 void rgb_helper(uint8_t r, uint8_t g, uint8_t b);
 void rgb_set_layer_color(uint8_t layer);
-
-static bool b_LSFT = false;
 
 extern layer_state_t layer_state;   // quantum/action_layer.c
 
@@ -370,17 +366,16 @@ bool long_delay(uint32_t timer32) {
     return (timer_elapsed32(timer32) > TAPPING_TERM);
 }
 
-void send_kcode(uint16_t kc, uint16_t km) {       // should we just OR the mods into the keycode instead?
-    if (km != 0)
-        set_mods(km);
+bool long_delay2(uint32_t timer32, uint32_t milliseconds) {
+    return (timer_elapsed32(timer32) > milliseconds);
+}
+
+void send_kcode(uint16_t kc, uint16_t km) {
+    if (km != 0) set_mods(km);
     register_code16(kc);
     wait_ms(1);
     unregister_code16(kc);
-    if (km != 0)
-        clear_mods();
-    // last_kc = kc;
-    // last_km = km;
-    // last_timer32 = timer_read32();
+    if (km != 0) clear_mods();
 }
 
 ////////////////////////////////////////////////////////
@@ -388,106 +383,143 @@ void send_kcode(uint16_t kc, uint16_t km) {       // should we just OR the mods 
 // Keyboard State Machine
 //
 
+// action_util.c: uint8_t real_mods
+// uint8_t get_mods(void); add_mods(uint8_t); del_mods(uint8_t); set_mods(uint8_t); clear_mods(void);
+
 typedef struct {
-    bool mods_active;   // true if sticky modifiers are active
-    uint16_t km;        //
-    uint16_t kc;        // keycode
-    uint32_t timer32;   // milliseconds
+    uint32_t timer32;       // milliseconds
+    uint16_t kc;            // keycode
+    uint8_t sticky_bits;    // sticky modifiers
+    bool event_pressed;     //
+    bool auto_repeat;
+    bool caps_lock;
 } _last_key_pressed;
 
-static _last_key_pressed LKP =  { .mods_active = false,  .kc = 0, .km = 0, .timer32 = 0 } ;
+static _last_key_pressed LKP =  {
+    .kc = 0, .sticky_bits = 0, .timer32 = 0,
+    .event_pressed = .auto_repeat = .caps_lock = false } ;
 static bool autorepeat = false;
+static bool b_CAPS = false;
+//static uint8_t sticky_bits = 0;
+
+uint8_t get_flags(void) {
+    uint8_t i = 0;
+    if (autorepeat) i |= 0x10;
+    if (b_CAPS)     i |= 0x01;
+    return i;
+}
 
 // bool process_record_kb(uint16_t keycode, keyrecord_t *record);
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
-        dmessage('v', keycode, record, LKP.kc, LKP.km);
-        if (keycode >= KC_ASUP && keycode <= KC_ASOFF) {
-            if (keycode == KC_ASDN  && b_LSFT == true) keycode = KC_ASUP;
-            if (keycode == KC_ASUP  && b_LSFT == true) keycode = KC_ASDN;
-            if (keycode == KC_ASON  && b_LSFT == true) keycode = KC_ASOFF;
-            if (keycode == KC_ASOFF && b_LSFT == true) keycode = KC_ASON;
-            return true;
-        }
-        if (keycode > QK_BASIC_MAX)                         // no additional processing for quatum keycode
-            return true;
-        if (keycode == KC_T_AR) {
-            autorepeat = autorepeat ^ 1; // = (autorepeat == true) ? false : true;
+        dmessage('v', keycode, record);
+        //
+        if (LKP.sticky_bits != 0 && short_delay(LKP.timer32)) { // process double-taps
+            if (keycode == KC_LSFT && LKP.kc == KC_LSFT) {
+                if (b_CAPS) {
+                    b_CAPS = false;
+                    LKP.sticky_bits ^= MOD_BIT(KC_LEFT_SHIFT);
+                    dprintf("caps-off\n");
+                } else {
+                    b_CAPS = true;                                  // KC_LSFT double-tap becomes CAPS-LOCK
+                    LKP.sticky_bits |= MOD_BIT(KC_LEFT_SHIFT);
+                    dprintf("caps-on\n");
+                }
+            }
+            if (keycode == KC_ESC && LKP.kc == KC_ESC) {
+                clear_mods();                                   // KC_RSFT double-tap becomes KC_ENTER
+                send_kcode(keycode, LKP.sticky_bits);
+                LKP.sticky_bits = 0;
+            }
+            if (keycode == KC_RSFT && LKP.kc == KC_RSFT) {
+                keycode = KC_ENTER;                             // KC_RSFT double-tap becomes KC_ENTER
+                send_kcode(keycode, LKP.sticky_bits);
+                LKP.sticky_bits = 0;
+            }
             return false;
         }
-        if (LKP.mods_active && short_delay(LKP.timer32)) {         // process double-taps
-            if (keycode == KC_RSFT && LKP.kc == KC_RSFT) {
-                keycode = KC_ENTER;                         // KC_RSFT double-tap becomes KC_ENTER
-                LKP.mods_active = false;
-            }
-            if (keycode == KC_LSFT && LKP.kc == KC_LSFT) {
-                b_LSFT = true;                              // KC_LSFT double-tap becomes CAPS-LOCK
-                LKP.mods_active = false;
-                dprintf("caps-lock 2\n");
-            }
+        // Modifier state is store as a single byte: GASC)R(GASC)L.
+        //  QMK modifiers are eight sequential codes starting with 0xE0
+        if (keycode >= KC_LEFT_CTRL && keycode <= KC_RIGHT_GUI) {   // process standard modifers
+            if (keycode == KC_RIGHT_GUI)   LKP.sticky_bits |= MOD_BIT(KC_RIGHT_GUI);   else  // QK_RGUI;
+            if (keycode == KC_RIGHT_ALT)   LKP.sticky_bits |= MOD_BIT(KC_RIGHT_ALT);   else  // QK_RALT;
+            if (keycode == KC_RIGHT_SHIFT) LKP.sticky_bits |= MOD_BIT(KC_RIGHT_SHIFT); else  // QK_RSFT;
+            if (keycode == KC_RIGHT_CTRL)  LKP.sticky_bits |= MOD_BIT(KC_RIGHT_CTRL);  else  // QK_RCTL;
+            if (keycode == KC_LEFT_GUI)    LKP.sticky_bits |= MOD_BIT(KC_LEFT_GUI);    else  // QK_LGUI;
+            if (keycode == KC_LEFT_ALT)    LKP.sticky_bits |= MOD_BIT(KC_LEFT_ALT);    else  // QK_LALT;
+            if (keycode == KC_LEFT_SHIFT)  LKP.sticky_bits |= MOD_BIT(KC_LEFT_SHIFT);  else  // QK_LSFT;
+            if (keycode == KC_LEFT_CTRL)   LKP.sticky_bits |= MOD_BIT(KC_LEFT_CTRL);   else  // QK_LCTL;
+            {   dmsg("Unexpected QMK modifier"); return false; }  // code should never reach this point
+            LKP.timer32 = timer_read32();
+            LKP.kc = keycode;
+            dmessage('m', keycode, record);
+            return false;
         }
-        if  (b_LSFT == true) {                              // process implied SHIFT events (caps-lock)
-            if (keycode == RGB_HUI) keycode = RGB_HUD;      // shift + HUI becomes HUD, etc.
-            if (keycode == RGB_VAI) keycode = RGB_VAD;
-            if (keycode == RGB_SAI) keycode = RGB_SAD;
+        if (keycode == KC_T_AR) {
+            autorepeat = !autorepeat;
+            //#ifdef CONSOLE_ENABLED
+            if (autorepeat) dprintf("ART");
+            else dprintf("ARF");
+            //#endif
+            return false;
+        }
+        #ifdef AUTO_SHIFT_ENABLE
+        if (keycode >= KC_ASUP && keycode <= KC_ASOFF) {
+            if (keycode == KC_ASDN  && (b_CAPS || MOD_MASK_SHIFT)) keycode = KC_ASUP;
+            if (keycode == KC_ASUP  && (b_CAPS || MOD_MASK_SHIFT)) keycode = KC_ASDN;
+            if (keycode == KC_ASON  && (b_CAPS || MOD_MASK_SHIFT)) keycode = KC_ASOFF;
+            if (keycode == KC_ASOFF && (b_CAPS || MOD_MASK_SHIFT)) keycode = KC_ASON;
+            return true;
+        }
+        #endif
+        if  (b_CAPS == true) {
+            if (keycode == RGB_HUI) keycode = RGB_HUD; else     // shift + HUI becomes HUD, etc.
+            if (keycode == RGB_VAI) keycode = RGB_VAD; else
+            if (keycode == RGB_SAI) keycode = RGB_SAD; else
             if (keycode == RGB_SPI) keycode = RGB_SPD;
         }
-        if (keycode >= KC_LEFT_CTRL && keycode <= KC_RIGHT_GUI) {   // process standard modifers
-            if (keycode == KC_RIGHT_CTRL)  LKP.km |= MOD_BIT(KC_RIGHT_CTRL);
-            if (keycode == KC_RIGHT_SHIFT) LKP.km |= MOD_BIT(KC_RIGHT_SHIFT);
-            if (keycode == KC_RIGHT_ALT)   LKP.km |= MOD_BIT(KC_RIGHT_ALT);
-            if (keycode == KC_RIGHT_GUI)   LKP.km |= MOD_BIT(KC_RIGHT_GUI);
-            if (keycode == KC_LEFT_CTRL)   LKP.km |= MOD_BIT(KC_LEFT_CTRL);
-            if (keycode == KC_LEFT_SHIFT)  LKP.km |= MOD_BIT(KC_LEFT_SHIFT);
-            if (keycode == KC_LEFT_ALT)    LKP.km |= MOD_BIT(KC_LEFT_ALT);
-            if (keycode == KC_LEFT_GUI)    LKP.km |= MOD_BIT(KC_LEFT_GUI);
+        if (keycode == KC_LSFT && b_CAPS == true) {             // single LSFT will cancel CAPS-LOCK
+            b_CAPS = false;                                     //  otherwise, will be handled as a normal
+            dprintf("caps-off\n");
+            LKP.sticky_bits ^= MOD_MASK_SHIFT;                  // sticky modifier
+        }
+        if (IS_ANY(keycode)) {
+            if (b_CAPS == true) {
+                LKP.sticky_bits |= MOD_BIT(KC_LEFT_SHIFT);
+                dmessage('s', keycode, record);
+            }
+            else {
+                dmessage('a', keycode, record);
+            }
+            send_kcode(keycode, LKP.sticky_bits);
             LKP.timer32 = timer_read32();
-            LKP.mods_active = true;
             LKP.kc = keycode;
-            dmessage('m', keycode, record, LKP.kc, LKP.km);
+            LKP.sticky_bits = 0;
             return false;
         }
-        if (IS_MOD(keycode)) {              // process other modifers
-            LKP.timer32 = timer_read32();
-            LKP.mods_active = true;
-            LKP.kc = keycode;
-            LKP.km = MOD_BIT(keycode);
-            dmessage('?', keycode, record, LKP.kc, LKP.km);
-            return false;
-        }
-        if (b_LSFT == true) {               // process caps-lock
-            LKP.km = LKP.km | MOD_BIT(KC_LSFT);
-            dmessage('c', keycode, record, LKP.kc, LKP.km);
-        }
-        dmessage('A', keycode, record, LKP.kc, LKP.km);
-        LKP.timer32 = timer_read32();
-        LKP.mods_active = false;
-        LKP.kc = keycode;
-        send_kcode(keycode, LKP.km);
-        return false;
     }
     if (!record->event.pressed) {
         if (keycode == KC_ESC) {            // releasing ESC clears state-machine
-            LKP.mods_active = false;
-            if (b_LSFT == true)
-                dprintf("caps-lock off\n");
-            b_LSFT = false;
-            dprint(".\n");
+            dmessage('e', keycode, record);
+            clear_mods();
+            LKP.sticky_bits = 0;
+            if (b_CAPS == true)
+                dprintf("caps-off\n");
+            b_CAPS = false;
         }
-        if (keycode == KC_RSFT && LKP.mods_active && LKP.kc == KC_RSFT && long_delay(LKP.timer32)) {
-            send_kcode(KC_ENTER, LKP.km);    // releasing KC_RSFT long tap becomes KC_ENTER
-            LKP.mods_active = false;
-            return false;
-        }
-        if (keycode == KC_LSFT && LKP.mods_active && LKP.kc == KC_LSFT && long_delay(LKP.timer32)) {
-            b_LSFT = true;                  // releasing KC_LSFT long tap becomes CAPS-LOCK
-            dprintf("caps-lock 1\n");
-            return false;
-        }
-        // if (keycode == LKP.kc)
-        //     LKP.kc = KC_NO;
-        LKP.kc = KC_NO;
+        // if (LKP.sticky_bits != 0 && keycode == KC_RSFT && LKP.kc == KC_RSFT && long_delay(LKP.timer32)) {
+        //     send_kcode(KC_ENTER, LKP.sticky_bits);    // releasing KC_RSFT long tap becomes KC_ENTER
+        //     dmessage('r', keycode, record);
+        //     LKP.sticky_bits = 0;
+        //     return false;
+        // }
+        // if (LKP.sticky_bits != 0 && keycode == KC_LSFT &&  LKP.kc == KC_LSFT && long_delay(LKP.timer32)) {
+        //     dmessage('s', keycode, record);
+        //     b_CAPS = true;                  // releasing KC_LSFT long tap becomes CAPS-LOCK
+        //     dprintf("caps-on2\n");
+        //     return false;
+        // }
         return true;
     }
     return true;
@@ -496,7 +528,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 void matrix_scan_user(void) {
     if (autorepeat) {
         if (LKP.kc != KC_NO && long_delay(LKP.timer32)) {
-            send_kcode(LKP.kc, LKP.km);
+            send_kcode(LKP.kc, LKP.sticky_bits);
+            LKP.timer32 = timer_read32();
         }
     }
 }
@@ -536,23 +569,21 @@ void clear_buffer(void) {
   }
 }
 
-void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km) {
-    #if defined(OLED_ENABLE) || defined(CONSOLE_ENABLE)
+void dmessage( char tag, uint16_t keycode, keyrecord_t *record) {
     uint8_t i = logb2(layer_state);
     char p = (i < _LAST) ? _layer_names_char[i] : _layer_names_char[_LAST];
     char c = (char)(keycode2char( keycode));
     snprintf( get_buffer(), bufferSize,
-        "%c: %d %c %1d:%02d K%04x : %c %04x %04x %02x ",
-        tag, i, p, record->event.key.row, record->event.key.col, keycode, c, kc, km, d_flags) ;
+        "%c: %d%c %1d:%02d K%04x : %c %04x M%04x %02x %02x",
+        tag, i, p, record->event.key.row, record->event.key.col, keycode, c, LKP.kc, get_mods(), get_flags(), d_flags) ;
     if (d_flags != 0) {
         d_flags = 0;
     }
     dprintf("%s\n", get_buffer());
-    #endif
 }
 #else
 void clear_buffer(void) { return; }
-void dmessage( char tag, uint16_t keycode, keyrecord_t *record, uint16_t kc, uint16_t km) { return; }
+void dmessage( char tag, uint16_t keycode, keyrecord_t *record) { return; }
 #endif
 
 ////////////////////////////////////////////////////////
@@ -858,6 +889,48 @@ void slash_pipe_reset(qk_tap_dance_state_t *state, void *user_data) {
 }
 
 #endif //  TAP_DANCE_ENABLE
+
+/*
+
+  keycode.h:
+    enum hid_keyboard_keypad_usage {
+        KC_NO = 0x00,
+        KC_ROLL_OVER,
+        KC_POST_FAIL,
+        KC_UNDEFINED,
+        KC_A
+        ...
+        KC_ENTER     = 0x28,
+        KC_ESCAPE    = 0x29,
+        ...
+        KC_LEFT_CTRL = 0xE0,
+        KC_LEFT_SHIFT,
+        KC_LEFT_ALT,
+        KC_LEFT_GUI,
+        KC_RIGHT_CTRL,
+        KC_RIGHT_SHIFT,
+        KC_RIGHT_ALT,
+        KC_RIGHT_GUI
+        ...
+
+    enum quantum_keycodes {
+        // Ranges used in shortcuts - not to be used directly
+        QK_BASIC                = 0x0000,
+        QK_BASIC_MAX            = 0x00FF,
+        QK_MODS                 = 0x0100,
+        QK_LCTL                 = 0x0100,
+        QK_LSFT                 = 0x0200,
+        QK_LALT                 = 0x0400,
+        QK_LGUI                 = 0x0800,
+        QK_RMODS_MIN            = 0x1000,
+        QK_RCTL                 = 0x1100,
+        QK_RSFT                 = 0x1200,
+        QK_RALT                 = 0x1400,
+        QK_RGUI                 = 0x1800,
+        QK_MODS_MAX             = 0x1FFF,
+
+*/
+
 
 /*
 split_util.h:
