@@ -38,7 +38,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DIODE_DIRECTION COL2ROW
 
 #define USE_SERIAL
-// #define SOFT_SERIAL_PIN
+#define SOFT_SERIAL_PIN D2
 #define RGB_DI_PIN      B4
 #define MAIZE_RGB_VCC_ENABLE B5
 

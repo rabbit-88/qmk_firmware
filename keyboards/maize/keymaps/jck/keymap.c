@@ -7,8 +7,6 @@
 #include "keycode.h"
 // #include "config.h"
 #include "color.h"
-// #include "rgb_matrix.h"
-// #include "rgb_matrix/rgb_matrix.h"
 
 #define MUTE        KC_AUDIO_MUTE
 #define VOLUP       KC_AUDIO_VOL_UP
@@ -37,8 +35,6 @@
 #define KC_MS_ACC0  KC_MS_ACCEL0
 #define KC_MS_ACC1  KC_MS_ACCEL1
 #define KC_MS_ACC2  KC_MS_ACCEL2
-
-// #define TAPPING_TERM 375
 
 #ifdef TAP_DANCE_ENABLE
 typedef enum {

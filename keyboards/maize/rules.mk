@@ -1,4 +1,5 @@
-# MCU name / Bootloader selection
+# Maize rules
+
 MCU = atmega32u4
 BOOTLOADER = caterina
 
@@ -26,4 +27,5 @@ LTO_ENABLE = yes
 RGBLIGHT_SUPPORTED = yes
 RGB_MATRIX_SUPPORTED = yes
 SPLIT_KEYBOARD = yes
-# LAYOUTS = split_3x6_3
+
+LAYOUTS = split_3x6_3
