@@ -2,7 +2,7 @@
 BOOTMAGIC_ENABLE = yes		# Enable Bootmagic Lite
 MOUSEKEY_ENABLE = yes		# Mouse keys
 EXTRAKEY_ENABLE = yes		# Audio control and System control
-CONSOLE_ENABLE = yes		# Console for debug
+CONSOLE_ENABLE = no		# Console for debug
 COMMAND_ENABLE = no 		# Commands for debug and configuration
 NKRO_ENABLE = no			# Enable N-Key Rollover
 BACKLIGHT_ENABLE = no		# Enable keyboard backlight functionality
@@ -19,10 +19,14 @@ OLED_DRIVER_ENABLE  = no
 OLED_ENABLE = no			# can not enable CONSOLE and OLED at the same time
 OLED_DRIVER = SSD1306
 
+# RGBLIGHT is for underglow.
+# RGB_MATRIX is for per-key RGB.
+
 RGBLIGHT_SUPPORTED = no
 RGB_MATRIX_SUPPORTED = yes
+RGBLIGHT_ENABLE = yes		# enables six RGBs
+RGB_MATRIX_ENABLE = yes		# enables twenty-seven RGBs
 RGB_MATRIX_SPLIT = yes
-RGB_MATRIX_ENABLE = yes
 
 SPLIT_KEYBOARD = yes
 SPLIT_TRANSPORT = mirror
@@ -32,13 +36,17 @@ SPLIT_TRANSPORT_MIRROR = yes
 # RGB_MATRIX_KEYREACTIVE_ENABLED = yes
 
 TAPPING_TERM = 250
+BLINK_RATE = 500
+AUTOREPEAT_RATE = 125
 DEFAULT_FOLDER = crkbd/rev1
 EXTRAFLAGS += -flto
 
-EXTRAKEY_ENABLE = yes
+CONSOLE_ENABLE = yes
+EXTRAKEY_ENABLE = no
 AUTO_SHIFT_ENABLE = no
-
+BOOTMAGIC_ENABLE = no
+MOUSEKEY_ENABLE = no		# requires 1800 bytes
 #---
-# GET_AUTO_SHIFT_REPEAT = yes
-# GET_AUTO_REPEAT_PER_KEY = yes
+GET_AUTO_SHIFT_REPEAT = no
+GET_AUTO_REPEAT_PER_KEY = no
 

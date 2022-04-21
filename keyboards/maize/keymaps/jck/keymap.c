@@ -202,12 +202,13 @@ void oled_render_buffer(void);
 #endif
 
 #ifdef RGB_MATRIX_ENABLE
-extern rgb_config_t rgb_matrix_config;
-extern led_config_t g_led_config;
+
+void rgb_vcc_init(void);
+void rgb_vcc_on(void);
+void rgb_vcc_off(void);
 
 #endif
 void keyboard_pre_init_kb(void) {
-    // setPinOutput(B0) ... etc.
     d_flags |= 0x01;
     return;
 }
@@ -218,14 +219,19 @@ void keyboard_pre_init_user(void) {
 }
 
 void suspend_power_down_kb(void) {
+    #ifdef RGB_MATRIX_ENABLE
     rgb_matrix_set_suspend_state(true);
+    #endif
     suspend_power_down_user();
 }
 
 void suspend_wakeup_init_kb(void) {
+    #ifdef RGB_MATRIX_ENABLE
     rgb_matrix_set_suspend_state(false);
+    #endif
     suspend_wakeup_init_user();
 }
+
 
 //  gets called at the end of all QMK processing, before starting the next iteration.
 //  You can safely assume that QMK has dealt with the last matrix scan at the time that
@@ -247,9 +253,8 @@ void keyboard_post_init_kb(void) {
     oled_render_logo();
     #endif
     #ifdef RGB_ENABLE
-    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); //
-    //rgb_matrix_sethsv_noeeprom(HSV_OFF);
-    rgb_matrix_config.enable = 1;
+    rgb_vcc_init();
+    rgb_vcc_on();
     #endif
     //#ifdef CONSOLE_ENABLE
     //dprintf("SSP='SOFT_SERIAL_PIN'\n");
@@ -621,6 +626,27 @@ void oled_render_logo(void) {
 //                     { RGB_TEAL }, { RGB_ORANGE }, { RGB_GOLDENROD }, { RGB_CHARTREUSE },
 //                     { RGB_PURPLE }
 //  };
+
+static bool rgb_vcc = false;
+
+extern rgb_config_t rgb_matrix_config;
+extern led_config_t g_led_config;
+
+void rgb_vcc_init(void) {
+    setPinOutput(MAIZE_RGB_VCC_ENABLE);
+    writePinLow(MAIZE_RGB_VCC_ENABLE);
+    rgb_matrix_config.enable = 1;
+}
+void rgb_vcc_on(void) {
+    rgb_vcc = true;
+    writePinHigh(MAIZE_RGB_VCC_ENABLE);
+    rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
+}
+void rgb_vcc_off(void) {
+    rgb_vcc = false;
+    writePinLow(MAIZE_RGB_VCC_ENABLE);
+    //rgb_matrix_sethsv_noeeprom(HSV_OFF);
+}
 
 void rgb_helper(uint8_t r, uint8_t g, uint8_t b) {
     for (uint8_t i = 0; i < DRIVER_LED_TOTAL; i++) {

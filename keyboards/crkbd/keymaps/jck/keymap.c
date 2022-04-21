@@ -201,7 +201,8 @@ void oled_render_logo(void);
 void oled_render_buffer(void);
 #endif
 
-#ifdef RGB_MATRIX_ENABLE
+// #if defined(RGB_MATRIX_ENABLE) || defined(RGBLIGHT_ENABLE)
+#if defined(RGB_MATRIX_ENABLE)
 extern rgb_config_t rgb_matrix_config;
 extern led_config_t g_led_config;
 
@@ -246,7 +247,8 @@ void keyboard_post_init_kb(void) {
     clear_buffer();
     oled_render_logo();
     #endif
-    #ifdef RGB_ENABLE
+//    #if defined(RGB_MATRIX_ENABLE) || defined(RGBLIGHT_ENABLE)
+    #if defined(RGB_MATRIX_ENABLE)
     rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); //
     //rgb_matrix_sethsv_noeeprom(HSV_OFF);
     rgb_matrix_config.enable = 1;
@@ -260,7 +262,10 @@ void keyboard_post_init_user(void) {
     // # rgb_matrix_sethsv_noeeprom(HSV_OFF);
 }
 
+bool blink_update(void);
+
 void housekeeping_task_kb(void) {
+    blink_update();
     d_flags |= 0x04;
 }
 
@@ -308,6 +313,7 @@ const char _layer_names_char[7]= {
  };
  #endif
 
+
 uint8_t logb2(uint8_t value) {  // 32-bit word to find the log base 2 of
     uint8_t r = 0;              // r will be log-base-2(v)
     while (value>>=1) r++;
@@ -341,6 +347,26 @@ void send_kcode(uint16_t kc, uint16_t km) {
     unregister_code16(kc);
     if (km != 0) clear_mods();
 }
+
+static bool blink = false;
+#ifndef RGB_MATRIX_ENABLE
+bool blink_update(void) { return false; }
+#else
+    #ifndef BLINK_RATE
+        #define BLINK_RATE 500
+    #endif
+uint32_t blink_time_last = 0;
+uint32_t blink_time_elapsed = 0;
+
+bool blink_update(void) {
+    if (blink_time_last == 0 || long_delay2(blink_time_last, BLINK_RATE)) {
+        blink_time_last = timer_read32();
+        blink = ! blink;
+        return true;
+    }
+    return false;
+}
+#endif
 
 ////////////////////////////////////////////////////////
 //
@@ -376,6 +402,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
         dmessage('v', keycode, record);
         // process double-taps
+        if (keycode == KC_RSFT && LKP.kc == KC_RSFT && short_delay(LKP.timer32)) {
+            keycode = KC_ENTER;                             // KC_RSFT double-tap becomes KC_ENTER
+            send_kcode(keycode, LKP.sticky_bits);
+            LKP.sticky_bits = 0;
+        }
         if (LKP.sticky_bits != 0 && short_delay(LKP.timer32)) {
             if (keycode == KC_LSFT && LKP.kc == KC_LSFT) {
                 if (LKP.caps_lock) {
@@ -390,11 +421,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             }
             if (keycode == KC_ESC && LKP.kc == KC_ESC) {
                 clear_mods();                                   // KC_RSFT double-tap becomes KC_ENTER
-                send_kcode(keycode, LKP.sticky_bits);
-                LKP.sticky_bits = 0;
-            }
-            if (keycode == KC_RSFT && LKP.kc == KC_RSFT) {
-                keycode = KC_ENTER;                             // KC_RSFT double-tap becomes KC_ENTER
                 send_kcode(keycode, LKP.sticky_bits);
                 LKP.sticky_bits = 0;
             }
@@ -427,21 +453,12 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         }
         if (keycode == KC_T_AR) {
             LKP.auto_repeat = !LKP.auto_repeat;
-            //#ifdef CONSOLE_ENABLED
-            if (LKP.auto_repeat) dprintf("ART");
-            else dprintf("ARF");
-            //#endif
+            // #ifdef CONSOLE_ENABLED
+            // if (LKP.auto_repeat) dprintf("ART");
+            // else dprintf("ARF");
+            // #endif
             return false;
         }
-        // #ifdef AUTO_SHIFT_ENABLE
-        // if (keycode >= KC_ASUP && keycode <= KC_ASOFF) {
-        //     if (keycode == KC_ASDN  && (LKP.caps_lock || MOD_MASK_SHIFT)) keycode = KC_ASUP;
-        //     if (keycode == KC_ASUP  && (LKP.caps_lock || MOD_MASK_SHIFT)) keycode = KC_ASDN;
-        //     if (keycode == KC_ASON  && (LKP.caps_lock || MOD_MASK_SHIFT)) keycode = KC_ASOFF;
-        //     if (keycode == KC_ASOFF && (LKP.caps_lock || MOD_MASK_SHIFT)) keycode = KC_ASON;
-        //     return true;
-        // }
-        // #endif
         if  (LKP.caps_lock == true) {
             if (keycode == RGB_HUI) keycode = RGB_HUD; else     // shift + HUI becomes HUD, etc.
             if (keycode == RGB_VAI) keycode = RGB_VAD; else
@@ -483,123 +500,19 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
+#ifndef AUTOREPEAT_RATE
+#define AUTOREPEAT_RATE 125
+#endif
 void matrix_scan_user(void) {
     if (LKP.auto_repeat) {
-        if (LKP.kc != 0 && LKP.key_down && long_delay2(LKP.timer32, 125)) {
-            // if (LKP.caps_lock == true)
-            //     LKP.sticky_bits |= MOD_BIT(KC_LEFT_SHIFT);
+        if (LKP.kc != 0 && LKP.key_down && long_delay2(LKP.timer32, AUTOREPEAT_RATE)) {
             send_kcode(LKP.kc, LKP.sticky_bits);
             LKP.timer32 = timer_read32();
         }
     }
 }
 
-////////////////////////////////////////////////////////
-//
-//  RGB LOGIC (keyboard dependent)
-//
-/*
- *  rgb_matrix_types.h
 
-    typedef union {
-    uint32_t raw;
-    struct PACKED {
-        uint8_t     enable : 2;
-        uint8_t     mode : 6;
-        HSV         hsv;
-        uint8_t     speed;  // EECONFIG needs to be increased to support this
-        led_flags_t flags;
-    };
-} rgb_config_t;
-*/
-
-#ifdef RGB_MATRIX_ENABLE
-//RGB _palete[13] = { { RGB_OFF },  { RGB_WHITE }, { RGB_RED }, { RGB_GREEN }, { RGB_BLUE }, };
-//                     { RGB_CYAN }, { RGB_MAGENTA }, { RGB_YELLOW },
-//                     { RGB_TEAL }, { RGB_ORANGE }, { RGB_GOLDENROD }, { RGB_CHARTREUSE },
-//                     { RGB_PURPLE }
-//  };
-
-/*
-uint8_t rgb_layers [5][2][27] = {
-    [_BASE] =
-    {   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-    }, // 0                          9 10                         19                   26
-    [_LOWER] =
-    {   { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
-        { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
-    },
-    [_RAISE] =
-    {   { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 },
-        { 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 }
-    },
-    [_ADJUST] =
-    {   { 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 },
-        { 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 }
-    },
-    [_MOUSE] =
-    {   { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 },
-        { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 }
-    }, //                   6                                                           26
-};     // 6: Space, B G T R F V _ _ C D E W S X Z A Q ESC TAB SFT
-       // 6: Space, N H Y U J M _ _ . K I O L . . ; P DEL  '  RET
-
-RGB palete[5] = {   {0x00, 0x00, 0x20},     //
-                    {0x10, 0x00, 0x00},     //
-                    {0x00, 0x10, 0x00},     //
-                    {0x30, 0x10, 0x00},     //
-                    {0x20, 0x00, 0x20}, };  //
-
-*/
-void rgb_helper(uint8_t r, uint8_t g, uint8_t b) {
-    for (uint8_t i = 0; i < DRIVER_LED_TOTAL; i++) {
-        rgb_matrix_set_color(i, r, g, b);
-    }
-}
-
-void rgb_set_layer_color(uint8_t layer) {
-    //if (1) {
-        switch (layer) {
-            case _BASE:
-                rgb_helper( 0x00, 0x00, 0x20);
-                //rgb_helper( palete[0].r, palete[0].g, palete[0].b);
-                break;
-            case _LOWER:
-                rgb_helper( 0x10, 0x00, 0x00);
-                //rgb_helper( palete[1].r, palete[1].g, palete[1].b);
-                break;
-            case _RAISE:
-                rgb_helper( 0x00, 0x10, 0x00);
-                //rgb_helper( palete[2].r, palete[2].g, palete[2].b);
-                break;
-            case _ADJUST:
-                rgb_helper( 0x30, 0x10, 0x00);  // orange
-                //rgb_helper( palete[3].r, palete[3].g, palete[3].b);
-                break;
-            case _MOUSE:
-                rgb_helper( 0x20, 0x00, 0x20);
-                //rgb_helper( palete[4].r, palete[4].g, palete[4].b);
-                break;
-            default:
-                return;
-        }
-    // } else {
-    //     if (layer > _MOUSE) layer = _MOUSE;
-    //     RGB color;
-    //     for (uint8_t j = 0; j < 2; j++) {
-    //         for (uint8_t k = 0; k < 27; k++) {
-    //             uint8_t i = j*27 + k;
-    //             uint8_t p = rgb_layers[layer][j][k];
-    //             color = palete[p];
-    //             dprintf("set_color: %d:%d, %d, %d: %d, %d, %d \n", layer, i ,j, k, color.r, color.g, color.b );
-    //             rgb_matrix_set_color(i, color.r, color.g, color.b);
-    //         }
-    //     }
-    // }
-}
-
-#endif
 
 
 ////////////////////////////////////////////////////////
@@ -607,7 +520,6 @@ void rgb_set_layer_color(uint8_t layer) {
 //  Manage changes to active keyboard layer
 //
 
-void set_lsft_rgb_indicator(void);
 
 extern layer_state_t layer_state;   // quantum/action_layer.c
 // layer_state_t last_layer_state = 0x8F;
@@ -616,15 +528,11 @@ layer_state_t layer_state_set_user(layer_state_t state) {
     return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
 };
 
+void rgb_update_capslock_status(void);
 void rgb_set_layer_color(uint8_t layer);
 
 void rgb_matrix_indicators_kb(void) {
     rgb_set_layer_color(logb2(layer_state));
-    set_lsft_rgb_indicator();
-    // if (layer_state != last_layer_state) {           // DOES NOT WORK
-    //     rgb_set_layer_color(logb2(layer_state));     // RGBs stay bright red
-    //     last_layer_state = layer_state;              // wtf?
-    // }
 }
 
 
@@ -634,6 +542,8 @@ void rgb_matrix_indicators_kb(void) {
 //
 
 #ifdef RGB_MATRIX_ENABLE
+
+
 //RGB { { RGB_OFF },  { RGB_WHITE }, { RGB_RED }, { RGB_GREEN }, { RGB_BLUE }, };
 //                     { RGB_CYAN }, { RGB_MAGENTA }, { RGB_YELLOW },
 //                     { RGB_TEAL }, { RGB_ORANGE }, { RGB_GOLDENROD }, { RGB_CHARTREUSE },
@@ -665,8 +575,11 @@ uint8_t rgb_layers [5][2][27] = {
        // 6: Space, B G T R F V _ _ C D E W S X Z A Q ESC TAB SFT
        // 6: Space, N H Y U J M _ _ . K I O L . . ; P DEL  '  RET
 
-#define RGB_LSFT_OFFSET 26
-#define RGB_LSFT_COLOR   7
+#define RGB_SW19_L_OFFSET 14        // "MOUSE" button, left
+#define RGB_SW19_R_OFFSET 41        // "MOUSE" button, right +27
+#define RGB_SW13_L_OFFSET 26        // "Left Shift" button
+#define RGB_SW13_R_OFFSET 53        // "Right Shift buttom"
+#define RGB_PALETTE_BLINK  6
 
 typedef struct packed {
     uint8_t r;
@@ -686,10 +599,18 @@ _rgb palette[palette_size] = {
     {0x40, 0x40, 0x40},     // 7 white
 };
 
-void set_lsft_rgb_indicator(void) {
+void rgb_update_capslock_status(void) {
     if (LKP.caps_lock && layer_state == 0) {
-        _rgb color = palette[RGB_LSFT_COLOR];
-        rgb_matrix_set_color(RGB_LSFT_OFFSET, color.r, color.g, color.b);
+        _rgb color = palette[RGB_PALETTE_BLINK];
+        rgb_matrix_set_color(RGB_SW13_L_OFFSET, color.r, color.g, color.b);  // Left Shift SW
+    }
+}
+
+void rgb_update_autorepeat_status(void) {
+    if (LKP.auto_repeat && blink) {
+        _rgb color = palette[RGB_PALETTE_BLINK];
+        rgb_matrix_set_color(RGB_SW19_L_OFFSET, color.r, color.g, color.b);
+        rgb_matrix_set_color(RGB_SW19_R_OFFSET, color.r, color.g, color.b);
     }
 }
 
@@ -711,6 +632,8 @@ void rgb_set_layer_color(uint8_t layer) {
             }
         }
     }
+    rgb_update_capslock_status();
+    rgb_update_autorepeat_status();
 }
 
 #endif
@@ -795,21 +718,6 @@ void oled_render_logo(void) {
     oled_clear();
     oled_write_P(logo, false);
 }
-
-// void render_bootmagic_status(bool status) {
-//     // Show Ctrl-Gui Swap options
-//     static const char PROGMEM logo[][2][3] = {
-//         {{0x97, 0x98, 0}, {0xb7, 0xb8, 0}},
-//         {{0x95, 0x96, 0}, {0xb5, 0xb6, 0}},
-//     };
-//     if (status) {
-//         oled_write_ln_P(logo[0][0], false);
-//         oled_write_ln_P(logo[0][1], false);
-//     } else {
-//         oled_write_ln_P(logo[1][0], false);
-//         oled_write_ln_P(logo[1][1], false);
-//     }
-// }
 
 #endif // OLED_ENABLE
 
@@ -1158,6 +1066,26 @@ keyrecord_t record {
     uint16_t time
   }
 }
+*/
+
+////////////////////////////////////////////////////////
+//
+//  RGB LOGIC (keyboard dependent)
+//
+
+/*
+ *  rgb_matrix_types.h
+
+    typedef union {
+    uint32_t raw;
+    struct PACKED {
+        uint8_t     enable : 2;
+        uint8_t     mode : 6;
+        HSV         hsv;
+        uint8_t     speed;  // EECONFIG needs to be increased to support this
+        led_flags_t flags;
+    };
+} rgb_config_t;
 */
 
 // EOF
