@@ -406,6 +406,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             keycode = KC_ENTER;                             // KC_RSFT double-tap becomes KC_ENTER
             send_kcode(keycode, LKP.sticky_bits);
             LKP.sticky_bits = 0;
+            return false;
         }
         if (LKP.sticky_bits != 0 && short_delay(LKP.timer32)) {
             if (keycode == KC_LSFT && LKP.kc == KC_LSFT) {
@@ -514,7 +515,6 @@ void matrix_scan_user(void) {
 
 
 
-
 ////////////////////////////////////////////////////////
 //
 //  Manage changes to active keyboard layer
@@ -610,15 +610,10 @@ void rgb_update_autorepeat_status(void) {
     if (LKP.auto_repeat && blink) {
         _rgb color = palette[RGB_PALETTE_BLINK];
         rgb_matrix_set_color(RGB_SW19_L_OFFSET, color.r, color.g, color.b);
-        rgb_matrix_set_color(RGB_SW19_R_OFFSET, color.r, color.g, color.b);
+        // rgb_matrix_set_color(RGB_SW19_R_OFFSET, color.r, color.g, color.b);
     }
 }
 
-void rgb_helper(uint8_t r, uint8_t g, uint8_t b) {
-    for (uint8_t i = 0; i < DRIVER_LED_TOTAL; i++) {
-        rgb_matrix_set_color(i, r, g, b);
-    }
-}
 void rgb_set_layer_color(uint8_t layer) {
     if (layer <= _MOUSE) {
         _rgb color;
