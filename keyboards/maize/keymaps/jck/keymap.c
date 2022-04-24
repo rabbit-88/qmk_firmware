@@ -202,12 +202,12 @@ void oled_render_buffer(void);
 #endif
 
 #ifdef RGB_MATRIX_ENABLE
-
+// static bool rgb_vcc = false;
 void rgb_vcc_init(void);
 void rgb_vcc_on(void);
 void rgb_vcc_off(void);
-
 #endif
+
 void keyboard_pre_init_kb(void) {
     d_flags |= 0x01;
     return;
@@ -268,6 +268,12 @@ void keyboard_post_init_user(void) {
 }
 
 void housekeeping_task_kb(void) {
+    #ifdef RGB_ENABLE
+    if (rgb_vcc == false) {
+        rgb_vcc_init();
+        rgb_vcc_on();
+    }
+    #endif
     d_flags |= 0x04;
 }
 
@@ -627,25 +633,23 @@ void oled_render_logo(void) {
 //                     { RGB_PURPLE }
 //  };
 
-static bool rgb_vcc = false;
-
 extern rgb_config_t rgb_matrix_config;
 extern led_config_t g_led_config;
 
 void rgb_vcc_init(void) {
-    setPinOutput(MAIZE_RGB_VCC_ENABLE);
-    writePinLow(MAIZE_RGB_VCC_ENABLE);
+    // setPinOutput(MAIZE_RGB_VCC_ENABLE);
+    // writePinLow(MAIZE_RGB_VCC_ENABLE);
     rgb_matrix_config.enable = 1;
 }
 void rgb_vcc_on(void) {
-    rgb_vcc = true;
-    writePinHigh(MAIZE_RGB_VCC_ENABLE);
+    // rgb_vcc = true;
+    // writePinHigh(MAIZE_RGB_VCC_ENABLE);
     rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR);
 }
 void rgb_vcc_off(void) {
-    rgb_vcc = false;
-    writePinLow(MAIZE_RGB_VCC_ENABLE);
-    //rgb_matrix_sethsv_noeeprom(HSV_OFF);
+    // rgb_vcc = false;
+    // writePinLow(MAIZE_RGB_VCC_ENABLE);
+    rgb_matrix_sethsv_noeeprom(HSV_OFF);
 }
 
 void rgb_helper(uint8_t r, uint8_t g, uint8_t b) {
