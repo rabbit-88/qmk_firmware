@@ -103,6 +103,7 @@ enum custom_keycodes {
     DUMMY = SAFE_RANGE,
     KC_T_SLASH,         // if true, KC_SLASH; if false, KC_UP
     KC_T_AR,
+    KC_T_JIG,
 };
 
 enum _layers {
@@ -135,9 +136,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
   [_LOWER] = LAYOUT_split_3x6_3(
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
-     KC_GRAVE,KC_1,    KC_2,    KC_3,    KC_4,    KC_5,                         KC_6,    KC_7,   KC_8,    KC_9,    KC_0,    _______,
-     M_REC1,  KC_INS,  KC_HOME, KC_PGUP, XXXXXXX, KC_END,                       XXXXXXX, KC_4,   KC_5,    KC_6,    KC_LDAQ, TD_LBRCKT,
-     M_PLAY1, KC_DEL,  KC_END,  KC_PGDN, XXXXXXX, XXXXXXX,                      XXXXXXX, KC_1,   KC_2,    KC_3,    KC_BSLASH, _______,
+    KC_GRAVE,  KC_1,    KC_2,    KC_3,    KC_4,    KC_5,                         KC_6,    KC_7,   KC_8,    KC_9,    KC_0,    _______,
+      M_REC1,  KC_INS,  KC_HOME, KC_PGUP, XXXXXXX, KC_END,                       XXXXXXX, KC_4,   KC_5,    KC_6,    KC_LDAQ, TD_LBRCKT,
+     M_PLAY1,  KC_DEL,  KC_END,  KC_PGDN, XXXXXXX, XXXXXXX,                      XXXXXXX, KC_1,   KC_2,    KC_3,    KC_BSLASH, _______,
   //|--------+--------+--------+--------+--------+--------+--------|  |--------+--------+--------+--------+--------+--------+--------|
                                           _______, _______, _______,   KC_0,    _______, _______
   ),
@@ -153,7 +154,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
      RESET,   KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,                        KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10, RESET,
      M_RSTOP, KC_F11,  KC_F12,  KC_F13,  KC_F14,  KC_F15,                       KC_F16,  KC_F17,  KC_F18,  KC_F19,  KC_F11, XXXXXXX,   // KC_F20 not available on macOS
-     KC_T_AR, KC_ASRP, KC_ASON, KC_ASOFF,KC_ASUP, KC_ASDN,                      XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_F12, _______,
+     KC_T_AR, KC_T_JIG,XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,                      XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_F12, _______,
   //|--------+--------+--------+--------+--------+--------+--------|  |--------+--------+--------+--------+--------+--------+--------|
                                          _______, _______, _______,    _______, _______, _______
   ),
@@ -383,11 +384,11 @@ typedef struct {
     bool key_down;
     bool auto_repeat;
     bool caps_lock;
-    bool once;
+    bool jiggler;
 } _last_key_pressed;
 
 static _last_key_pressed LKP =  {
-    .kc = 0, .sticky_bits = 0, .timer32 = 0, .auto_repeat = false, .caps_lock = false, .key_down = false, .once = false } ;
+    .kc = 0, .sticky_bits = 0, .timer32 = 0, .auto_repeat = false, .caps_lock = false, .key_down = false, .jiggler = false } ;
 
 uint8_t get_flags(void) {
     uint8_t i = 0;
@@ -413,11 +414,11 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 if (LKP.caps_lock) {
                     LKP.caps_lock = false;
                     LKP.sticky_bits ^= MOD_BIT(KC_LEFT_SHIFT);
-                    dprintf("caps-off\n");
+                    // dprintf("caps-off\n");
                 } else {
                     LKP.caps_lock = true;                                  // KC_LSFT double-tap becomes CAPS-LOCK
                     LKP.sticky_bits |= MOD_BIT(KC_LEFT_SHIFT);
-                    dprintf("caps-on\n");
+                    // dprintf("caps-on\n");
                 }
             }
             if (keycode == KC_ESC && LKP.kc == KC_ESC) {
@@ -430,7 +431,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         // a single LSFT will cancel CAPS-LOCK
         if (keycode == KC_LSFT && LKP.caps_lock == true) {
             LKP.caps_lock = false;
-            dprintf("caps-off\n");
+            // dprintf("caps-off\n");
             LKP.sticky_bits ^= MOD_MASK_SHIFT;
             return false;
         }
@@ -452,6 +453,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             dmessage('m', keycode, record);
             return false;
         }
+        if (keycode == KC_T_JIG) {
+            LKP.jiggler = !LKP.jiggler;
+            return false;
+        }
         if (keycode == KC_T_AR) {
             LKP.auto_repeat = !LKP.auto_repeat;
             // #ifdef CONSOLE_ENABLED
@@ -466,9 +471,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (keycode == RGB_SAI) keycode = RGB_SAD; else
             if (keycode == RGB_SPI) keycode = RGB_SPD;
         }
-        // if (keycode == MOUSE) {
-        //     LKP.once = true;
-        // }
         if (IS_ANY(keycode)) {
             if (LKP.caps_lock == true) {
                 LKP.sticky_bits |= MOD_BIT(KC_LEFT_SHIFT);
@@ -489,8 +491,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             dmessage('e', keycode, record);
             clear_mods();
             LKP.sticky_bits = 0;
-            if (LKP.caps_lock == true)
-                dprintf("caps-off\n");
+            // if (LKP.caps_lock == true)
+            //     dprintf("caps-off\n");
             LKP.caps_lock = false;
         }
         if (keycode == LKP.kc) {
@@ -510,6 +512,10 @@ void matrix_scan_user(void) {
             send_kcode(LKP.kc, LKP.sticky_bits);
             LKP.timer32 = timer_read32();
         }
+    }
+    if (LKP.jiggler && long_delay2(LKP.timer32, 300000)) {              // 30 seconds
+        for (uint8_t i = 5; i > 0 ; i++) { send_kcode(MS_LEFT, 0); }
+        for (uint8_t i = 5; i > 0 ; i++) { send_kcode(MS_RIGHT, 0); }   // 10 ms
     }
 }
 
@@ -611,7 +617,7 @@ void rgb_update_autorepeat_status(void) {
         _rgb color = palette[RGB_PALETTE_BLINK];
         rgb_matrix_set_color(RGB_SW19_L_OFFSET, color.r, color.g, color.b);
         // rgb_matrix_set_color(RGB_SW19_R_OFFSET, color.r, color.g, color.b);
-    }
+    }   // CHANGING RGB ON SECONDARY KB DOES NOT WORK -- WHY>?
 }
 
 void rgb_set_layer_color(uint8_t layer) {
