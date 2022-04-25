@@ -96,3 +96,6 @@ compile_commands.json
 .cache/
 .vscode/settings.json
 
+keyboards/crkbd/keymaps/jck/keymap-*.c
+keyboards/crkbd2/
+keyboards/foo
