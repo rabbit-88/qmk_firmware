@@ -21,9 +21,15 @@
 #define DEBOUNCE 5
 #define DIODE_DIRECTION COL2ROW
 
-#define USE_SERIAL
-#define USE_SERIAL_PD2
-#define SOFT_SERIAL_PIN D2
+// When using serial, define as D0 or D1,D2,D3,E6.
+//  ./platforms/avr/drivers/serial.c:
+//  ./platforms/chibios/drivers/serial.c:
+/*
+    if you are using serial and I2C on the board, you will need to set SOFT_SERIAL_PIN
+    to something other than D0 and D1 (as these are used for I2C communication).
+*/
+#define SOFT_SERIAL_PIN D3  // Pin 2 aka RX aka D2
+#define SELECT_SOFT_SERIAL_SPEED 1  // default, 137 kps
 #define RGB_DI_PIN      B4
 //#define MAIZE_RGB_VCC_ENABLE B5
 
@@ -53,6 +59,8 @@
 
 #define SPLIT_TRANSPORT_MIRROR
 #define SPLIT_LAYER_STATE_ENABLE
+#define SPLIT_LED_STATE_ENABLE
+// #define SPLIT_POINTING_ENABLE
 #define SPLIT_MODS_ENABLE
 
 #ifdef OLED_ENABLE
@@ -61,7 +69,7 @@
 
 #define FORCED_SYNC_THROTTLE_MS 100
 #define SPLIT_MAX_CONNECTION_ERRORS 10
-#define SPLIT_CONNECTION_CHECK_TIMEOUT 30000
+#define SPLIT_CONNECTION_CHECK_TIMEOUT 1000
 //  normally 500 ms, not 30 seconds
 #define SPLIT_LED_STATE_ENABLE
 
