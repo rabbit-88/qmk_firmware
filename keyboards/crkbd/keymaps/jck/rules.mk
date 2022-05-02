@@ -24,7 +24,6 @@ OLED_DRIVER = SSD1306
 
 RGBLIGHT_SUPPORTED = no
 RGB_MATRIX_SUPPORTED = yes
-RGBLIGHT_ENABLE = yes		# enables six RGBs
 RGB_MATRIX_ENABLE = yes		# enables twenty-seven RGBs
 RGB_MATRIX_SPLIT = yes
 
